@@ -1,0 +1,57 @@
+# ======================
+# Environment / Secrets
+# ======================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ======================
+# Python / Backend
+# ======================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+pip-log.txt
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# ======================
+# Node / Frontend
+# ======================
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+
+# Production build
+frontend/build/
+
+# ======================
+# IDE / Editor
+# ======================
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ======================
+# Misc
+# ======================
+*.log
+.cache/

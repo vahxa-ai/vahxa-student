@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  body {
+    @apply antialiased text-gray-800;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #eef2ff 0%, #fafbff 50%, #f5f3ff 100%);
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar        { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { @apply bg-indigo-200 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-indigo-400; }
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+  .gradient-text {
+    @apply bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent;
+  }
+}
+
+/* ── Prose (Markdown) ───────────────────────────────────────── */
+.prose h1 { @apply text-xl font-bold text-gray-800 mb-3; }
+.prose h2 { @apply text-base font-semibold text-indigo-700 mt-5 mb-2; }
+.prose h3 { @apply text-sm font-semibold text-gray-700 mt-4 mb-1.5; }
+.prose p  { @apply text-sm text-gray-700 leading-relaxed mb-2; }
+.prose ul { @apply text-sm text-gray-700 space-y-1 list-disc list-inside mb-3; }
+.prose li { @apply leading-relaxed; }
+.prose strong { @apply font-semibold text-gray-800; }
+.prose blockquote { @apply border-l-4 border-indigo-200 pl-3 text-gray-500 italic text-sm; }
+.prose code { @apply bg-indigo-50 text-indigo-700 rounded px-1 text-xs font-mono; }
+
+/* Markdown table */
+.prose table  { @apply w-full text-sm border-collapse mb-4 rounded-xl overflow-hidden; }
+.prose thead  { background: linear-gradient(90deg, #6366f1, #8b5cf6); color: white; }
+.prose thead th { @apply px-3 py-2.5 text-left text-xs font-semibold tracking-wide whitespace-nowrap; }
+.prose tbody tr { @apply border-b border-indigo-50 even:bg-indigo-50/40; }
+.prose tbody td { @apply px-3 py-2 text-gray-700 align-top; }
+.prose tbody tr:last-child { @apply border-b-0; }
+.prose tbody tr:hover { @apply bg-indigo-50/70; }
+
+/* Study plan */
+.study-plan-content table td:first-child,
+.study-plan-content table th:first-child { @apply w-24; }
