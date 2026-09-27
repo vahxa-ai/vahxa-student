@@ -4,10 +4,15 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
+_is_sqlite = settings.database_url.startswith("sqlite")
+
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
+    # Postgres (Cloud SQL): drop connections that went stale while the Cloud Run instance was idle,
+    # and keep the pool small — the smallest Cloud SQL tier allows only ~25 connections.
+    **({} if _is_sqlite else {"pool_pre_ping": True, "pool_size": 5, "max_overflow": 2, "pool_recycle": 1800}),
 )
 
 AsyncSessionLocal = async_sessionmaker(

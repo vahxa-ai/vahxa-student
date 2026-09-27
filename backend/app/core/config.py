@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # CORS
     frontend_url: str = "http://localhost:3000"
 
+    # Path to the React build to serve from this service (set in the container); empty = API only
+    frontend_dist: str = ""
+
     class Config:
         env_file = ".env"
 
