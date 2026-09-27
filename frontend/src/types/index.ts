@@ -316,7 +316,29 @@ export interface SampleTestAttempt {
 
 // --- College prep ---
 
+export interface AthleticsPrefs {
+  sport: string | null;
+  team: "mens" | "womens" | "coed" | null;
+  position_or_event: string | null;
+  level: string | null;
+  stats: string | null;
+  wants_to_compete: boolean;
+}
+
+export type CollegePriority = "academics" | "aid" | "athletics" | "location" | "size";
+
+export interface CollegePreferences {
+  regions: string | null;
+  size: "small" | "medium" | "large" | "any" | null;
+  setting: "urban" | "suburban" | "rural" | "any" | null;
+  need_aid: "yes" | "maybe" | "no" | null;
+  budget_note: string | null;
+  priorities: CollegePriority[];
+  athletics: AthleticsPrefs | null;
+}
+
 export interface CollegeProfile {
+  preferences?: CollegePreferences | null;
   intended_majors: string | null;
   interests: string | null;
   career_goals: string | null;
@@ -409,4 +431,31 @@ export interface Achievement {
   weeks_per_year: number | null;
   description: string | null;
   created_at: string;
+}
+
+export interface RecommendedCollege {
+  name: string;
+  location: string;
+  fit_category: "reach" | "target" | "likely";
+  why: string;
+  division: string;
+  athletics_note: string;
+  aid_note: string;
+  academic_note: string;
+}
+
+export interface RecommendationGroup {
+  key: "athletics" | "aid" | "academics";
+  title: string;
+  intro: string;
+  colleges: RecommendedCollege[];
+}
+
+export interface Recommendations {
+  summary: string;
+  athletic_levels: { division: string; fit: "strong" | "possible" | "stretch"; why: string }[];
+  groups: RecommendationGroup[];
+  next_steps: string[];
+  removed_by_check: number;
+  generated_at: string;
 }

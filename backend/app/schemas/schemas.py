@@ -543,6 +543,25 @@ class SelfMarkRequest(BaseModel):
 
 # --- College prep ---
 
+class AthleticsPrefs(BaseModel):
+    sport: Optional[str] = Field(default=None, max_length=100)
+    team: Optional[str] = Field(default=None, pattern="^(mens|womens|coed)$")   # performance standards differ
+    position_or_event: Optional[str] = Field(default=None, max_length=100)
+    level: Optional[str] = Field(default=None, max_length=100)          # e.g. varsity starter, club, state-ranked
+    stats: Optional[str] = Field(default=None, max_length=500)          # times, stats, honors
+    wants_to_compete: bool = False
+
+
+class CollegePreferences(BaseModel):
+    regions: Optional[str] = Field(default=None, max_length=200)        # e.g. "Texas, Northeast", "anywhere"
+    size: Optional[str] = Field(default=None, pattern="^(small|medium|large|any)$")
+    setting: Optional[str] = Field(default=None, pattern="^(urban|suburban|rural|any)$")
+    need_aid: Optional[str] = Field(default=None, pattern="^(yes|maybe|no)$")
+    budget_note: Optional[str] = Field(default=None, max_length=300)
+    priorities: list[str] = Field(default=[], max_length=5)             # academics | aid | athletics | location | size
+    athletics: Optional[AthleticsPrefs] = None
+
+
 class CollegeProfileIn(BaseModel):
     intended_majors: Optional[str] = Field(default=None, max_length=300)
     interests: Optional[str] = Field(default=None, max_length=2000)
@@ -550,6 +569,7 @@ class CollegeProfileIn(BaseModel):
     gpa: Optional[str] = Field(default=None, max_length=40)
     test_scores: Optional[str] = Field(default=None, max_length=300)
     notes: Optional[str] = Field(default=None, max_length=2000)
+    preferences: Optional[CollegePreferences] = None
 
 
 class CollegeProfileOut(CollegeProfileIn):
@@ -654,3 +674,36 @@ class AchievementOut(AchievementIn):
 
     class Config:
         from_attributes = True
+
+
+class RecommendedCollege(BaseModel):
+    name: str
+    location: str = ""
+    fit_category: str = "target"             # reach | target | likely
+    why: str = ""
+    division: str = ""                       # athletics lens: e.g. "NCAA Division III"
+    athletics_note: str = ""
+    aid_note: str = ""
+    academic_note: str = ""
+
+
+class RecommendationGroup(BaseModel):
+    key: str                                 # athletics | aid | academics
+    title: str
+    intro: str = ""
+    colleges: list[RecommendedCollege]
+
+
+class AthleticLevelFit(BaseModel):
+    division: str
+    fit: str                                 # strong | possible | stretch
+    why: str
+
+
+class RecommendationsOut(BaseModel):
+    summary: str
+    athletic_levels: list[AthleticLevelFit] = []
+    groups: list[RecommendationGroup]
+    next_steps: list[str] = []
+    removed_by_check: int = 0                # recommendations dropped by the fact-check
+    generated_at: datetime

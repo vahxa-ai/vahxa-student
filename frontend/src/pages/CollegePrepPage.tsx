@@ -4,19 +4,21 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Award, BookOpen, Check, ChevronDown, Compass, Info, Loader2, Map as MapIcon, Pencil, Plus, RefreshCw, School, Target,
-  Trash2, X,
+  Trash2, X, Search,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
+import { FindCollegesTab } from "../components/college/FindCollegesTab";
 import { collegeApi, apiErrorMessage, type AchievementInput } from "../services/api";
 import type {
   Achievement, AchievementCategory, AdmissionsGuide, CollegeCategory, CollegeEntry, CollegeProfile, Roadmap,
   RoadmapCategory,
 } from "../types";
 
-type Tab = "roadmap" | "guide" | "colleges" | "activities";
+type Tab = "roadmap" | "guide" | "find" | "colleges" | "activities";
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "roadmap", label: "My roadmap", icon: MapIcon },
   { key: "guide", label: "Admissions guide", icon: BookOpen },
+  { key: "find", label: "Find colleges", icon: Search },
   { key: "colleges", label: "College list", icon: School },
   { key: "activities", label: "Activities", icon: Award },
 ];
@@ -567,6 +569,7 @@ export const CollegePrepPage: React.FC = () => {
 
       {tab === "roadmap" && <RoadmapTab />}
       {tab === "guide" && <GuideTab />}
+      {tab === "find" && <FindCollegesTab />}
       {tab === "colleges" && <CollegesTab />}
       {tab === "activities" && <ActivitiesTab />}
     </div>

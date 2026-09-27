@@ -14,11 +14,12 @@ from app.api.routes.curriculum import _ai_http_error
 from app.db.database import get_db
 from app.models.models import (
     Student, User, CollegeProfile, AdmissionsGuide, CollegeRoadmap, CollegeEntry, Achievement,
+    CollegeRecommendation,
 )
 from app.schemas.schemas import (
     CollegeProfileIn, CollegeProfileOut, AdmissionsGuideOut, GuideChapter, RoadmapOut, RoadmapStage,
     RoadmapMilestone, MilestoneUpdate, CollegeEntryIn, CollegeEntryUpdate, CollegeEntryOut, CollegeSummary,
-    AchievementIn, AchievementOut,
+    AchievementIn, AchievementOut, CollegePreferences, RecommendationsOut,
 )
 from app.services import college_ai, ai_service
 from app.services.curriculum_library import _norm_country
@@ -52,7 +53,17 @@ def _country(student: Student) -> tuple[str, str]:
 @router.get("/profile", response_model=CollegeProfileOut)
 async def get_college_profile(student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)):
     p = await _profile(student, db)
-    return CollegeProfileOut.model_validate(p, from_attributes=True) if p else CollegeProfileOut()
+    return _profile_out(p) if p else CollegeProfileOut()
+
+
+def _prefs(p: Optional[CollegeProfile]) -> dict:
+    return json.loads(p.preferences_json) if p and p.preferences_json else {}
+
+
+def _profile_out(p: CollegeProfile) -> CollegeProfileOut:
+    fields = {k: getattr(p, k) for k in ("intended_majors", "interests", "career_goals", "gpa", "test_scores", "notes", "updated_at")}
+    prefs = _prefs(p)
+    return CollegeProfileOut(**fields, preferences=CollegePreferences(**prefs) if prefs else None)
 
 
 @router.put("/profile", response_model=CollegeProfileOut)
@@ -62,11 +73,58 @@ async def save_college_profile(payload: CollegeProfileIn, student: Student = Dep
     if not p:
         p = CollegeProfile(student_id=student.id)
         db.add(p)
-    for k, v in payload.model_dump().items():
+    data = payload.model_dump()
+    prefs = data.pop("preferences")
+    for k, v in data.items():
         setattr(p, k, (v.strip() or None) if isinstance(v, str) else v)
+    if prefs is not None:
+        prefs["priorities"] = [x for x in prefs.get("priorities", [])
+                               if x in ("academics", "aid", "athletics", "location", "size")]
+        p.preferences_json = json.dumps(prefs)
     p.updated_at = datetime.utcnow()
     await db.flush()
-    return CollegeProfileOut.model_validate(p, from_attributes=True)
+    return _profile_out(p)
+
+
+# ─── Recommendations ──────────────────────────────────────────────────────────
+
+async def _recommendation(student: Student, db: AsyncSession) -> Optional[CollegeRecommendation]:
+    return (await db.execute(
+        select(CollegeRecommendation).where(CollegeRecommendation.student_id == student.id))).scalar_one_or_none()
+
+
+def _recommendation_out(r: CollegeRecommendation) -> RecommendationsOut:
+    return RecommendationsOut(**json.loads(r.content_json), generated_at=r.generated_at)
+
+
+@router.get("/recommendations", response_model=Optional[RecommendationsOut])
+async def get_recommendations(student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)):
+    r = await _recommendation(student, db)
+    return _recommendation_out(r) if r else None
+
+
+@router.post("/recommendations", response_model=RecommendationsOut)
+async def generate_recommendations(student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)):
+    """Suggest colleges from the student's activities, goals and preferences (athletics / aid / academics),
+    fact-checked. Replaces the previous suggestions."""
+    _country(student)
+    profile = await _profile(student, db)
+    achievements = [
+        f"{a.title} ({a.category})" + (f", {a.role}" if a.role else "") + (f", grades {a.grades}" if a.grades else "")
+        + (f", {a.hours_per_week:g} hrs/wk" if a.hours_per_week else "") + (f": {a.description}" if a.description else "")
+        for a in (await db.execute(select(Achievement).where(Achievement.student_id == student.id))).scalars().all()
+    ]
+    listed = [c.name for c in (await db.execute(
+        select(CollegeEntry).where(CollegeEntry.student_id == student.id))).scalars().all()]
+    content = await _run_ai(college_ai.generate_recommendations(student, profile, _prefs(profile), achievements, listed))
+    r = await _recommendation(student, db)
+    if r:
+        r.content_json, r.generated_at = json.dumps(content), datetime.utcnow()
+    else:
+        r = CollegeRecommendation(student_id=student.id, content_json=json.dumps(content), generated_at=datetime.utcnow())
+        db.add(r)
+    await db.flush()
+    return _recommendation_out(r)
 
 
 # ─── Admissions guide (shared per country) ────────────────────────────────────

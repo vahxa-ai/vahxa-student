@@ -187,3 +187,175 @@ Return ONLY a JSON object, no code fences:
     if not summary["overview"] or _SELF_CORRECTION.search(summary["overview"] + summary["fit_for_student"]):
         raise ValueError("college summary was incomplete")
     return summary
+
+
+# ─── College recommendations (athletics / financial aid / academics) ─────────
+
+_FITS = ("reach", "target", "likely")
+_LEVEL_FITS = ("strong", "possible", "stretch")
+_GROUP_TITLES = {"athletics": "Athletic fit", "aid": "Strong financial aid", "academics": "Academic quality for your goals"}
+
+
+def _prefs_block(prefs: dict) -> str:
+    lines = []
+    for label, key in [("Preferred regions", "regions"), ("Size", "size"), ("Setting", "setting"),
+                       ("Needs financial aid", "need_aid"), ("Budget notes", "budget_note")]:
+        if prefs.get(key):
+            lines.append(f"{label}: {prefs[key]}")
+    if prefs.get("priorities"):
+        lines.append("Top priorities (in order): " + ", ".join(prefs["priorities"]))
+    ath = prefs.get("athletics") or {}
+    if ath.get("sport"):
+        details = "; ".join(f"{k.replace('_', ' ')}: {v}" for k, v in ath.items()
+                            if k != "wants_to_compete" and v not in (None, ""))
+        lines.append(f"Athletics: {details} — " + ("wants to compete in college" if ath.get("wants_to_compete")
+                                                     else "not planning to compete in college"))
+    return "\n".join(lines) or "No specific preferences given."
+
+
+async def generate_recommendations(student: Student, profile: Optional[CollegeProfile], prefs: dict,
+                                   achievements: list[str], already_listed: list[str]) -> dict:
+    _require_ai()
+    ath = prefs.get("athletics") or {}
+    athletic = bool(ath.get("sport") and ath.get("wants_to_compete"))
+    groups_wanted = (["athletics"] if athletic else []) + ["aid", "academics"]
+    activities = "\n".join(f"  - {a}" for a in achievements[:30]) or "  (none recorded)"
+    athlete_role = " who also advises student-athletes on recruiting" if athletic else ""
+    levels_rule = "" if athletic else "athletic_levels must be an empty list (they are not planning to compete)."
+    prompt = f"""You are an experienced, realistic college counselor{athlete_role}. Recommend colleges that genuinely
+suit this student.
+
+Student:
+{_student_block(student, profile)}
+Activities & achievements:
+{activities}
+Preferences:
+{_prefs_block(prefs)}
+Already on their list (do not repeat): {", ".join(already_listed[:40]) or "none"}
+
+Produce these groups (use exactly these keys): {", ".join(groups_wanted)}
+- "athletics": colleges where they could realistically compete in their sport, across the right competitive levels
+  (NCAA Division I / II / III, NAIA, junior college, or the equivalent where they live). Judge their level honestly
+  from their stats: most high-school athletes fit D2, D3 or NAIA; only suggest D1 if their results clearly support it.
+  Performance standards differ for men's and women's teams: if the team isn't stated, don't judge their level from
+  times or stats — mark every level "possible" and explain that it depends on the team they'd compete on.
+  NCAA Division III offers no athletic scholarships (but can offer need-based or merit aid).
+- "aid": colleges known for generous financial aid that fits their situation (e.g. meeting full demonstrated need,
+  strong merit scholarships, in-state value, aid for international students if relevant).
+- "academics": colleges with strong programs in their intended major and good teaching and outcomes, at their level.
+Give 4-6 real, currently operating colleges per group, spread across reach / target / likely for this student and
+respecting their preferences. Only name institutions you are sure exist. Do not state exact acceptance rates, costs,
+scholarship amounts or deadlines. {levels_rule}
+
+Return ONLY a JSON object, no code fences:
+{{"summary": "3-4 sentences on what kind of colleges suit them and why",
+  "athletic_levels": [{{"division": "NCAA Division III", "fit": "strong | possible | stretch", "why": "..."}}],
+  "groups": [{{"key": "athletics | aid | academics", "intro": "one sentence",
+               "colleges": [{{"name": "official name", "location": "city, state/region", "fit_category": "reach | target | likely",
+                             "why": "1-2 sentences specific to this student", "division": "athletic division if relevant, else empty",
+                             "athletics_note": "", "aid_note": "", "academic_note": ""}}]}}],
+  "next_steps": ["3-6 concrete actions (e.g. recruiting profile, contacting coaches, net price calculators, visits)"]}}"""
+    data = _parse_json(await _call_llm(prompt, max_tokens=7000))
+
+    groups = []
+    for g in data.get("groups") or []:
+        key = _s(g.get("key") if isinstance(g, dict) else "", 20).lower()
+        if key not in groups_wanted or any(x["key"] == key for x in groups):
+            continue
+        colleges = []
+        for c in g.get("colleges") or []:
+            if not isinstance(c, dict) or not _s(c.get("name")):
+                continue
+            fit = _s(c.get("fit_category"), 10).lower()
+            colleges.append({
+                "name": _s(c["name"], 200), "location": _s(c.get("location"), 200),
+                "fit_category": fit if fit in _FITS else "target", "why": _s(c.get("why"), 600),
+                "division": _s(c.get("division"), 80) if key == "athletics" else "",
+                "athletics_note": _s(c.get("athletics_note"), 400), "aid_note": _s(c.get("aid_note"), 400),
+                "academic_note": _s(c.get("academic_note"), 400),
+            })
+        if colleges:
+            groups.append({"key": key, "title": _GROUP_TITLES[key], "intro": _s(g.get("intro"), 400), "colleges": colleges})
+    if not groups:
+        raise ValueError("no recommendations returned")
+    levels = []
+    for lv in (data.get("athletic_levels") or []) if athletic else []:
+        if isinstance(lv, dict) and _s(lv.get("division")):
+            fit = _s(lv.get("fit"), 10).lower()
+            levels.append({"division": _s(lv["division"], 80), "fit": fit if fit in _LEVEL_FITS else "possible",
+                           "why": _s(lv.get("why"), 500)})
+
+    groups, removed = await _fact_check_recommendations(groups, ath.get("sport"))
+    if not groups:
+        raise ValueError("no recommendations passed the fact-check")
+    return {"summary": _s(data.get("summary"), 1500), "athletic_levels": levels, "groups": groups,
+            "next_steps": _str_list(data.get("next_steps"), 6), "removed_by_check": removed}
+
+
+def _division_key(text: str) -> Optional[str]:
+    """Normalize 'NCAA Division III' / 'D3' / 'NAIA' / 'NJCAA' … to a comparable key; None if unknown."""
+    t = text.lower()
+    if "naia" in t:
+        return "naia"
+    if "njcaa" in t or "junior college" in t or "juco" in t:
+        return "juco"
+    m = re.search(r"\b(?:division|div\.?|d)\s*-?\s*(iii|ii|i|3|2|1)\b", t)
+    if m:
+        return {"iii": "d3", "3": "d3", "ii": "d2", "2": "d2", "i": "d1", "1": "d1"}[m.group(1)]
+    if t.strip() == "none":
+        return "none"
+    return None
+
+
+async def _fact_check_recommendations(groups: list[dict], sport: Optional[str]) -> tuple[list[dict], int]:
+    """Independent check: drop colleges that don't exist; blank out location / division / aid claims that don't hold.
+    The checker states the division it believes is correct (rather than approving ours), and we compare — asking a
+    model to confirm a claim invites agreement."""
+    items = [(g, c) for g in groups for c in g["colleges"]]
+    sport_part = f" in {sport}" if sport else ""
+    listing = "\n".join(
+        f"{i}. {c['name']} | stated location: {c['location'] or '-'} | aid claim: {c['aid_note'] or '-'}"
+        for i, (_, c) in enumerate(items)
+    )
+    prompt = f"""You are a meticulous fact-checker for college information. For each numbered institution, answer from
+your own knowledge (do not assume the line is correct):
+- "exists": does this institution exist and currently operate under that name (at the stated location, if given)?
+- "location_ok": is the stated location right? (null if "-")
+- "division": which athletic association/division does it currently compete in{sport_part}? One of "NCAA Division I",
+  "NCAA Division II", "NCAA Division III", "NAIA", "NJCAA", "none", or "unknown". Account for recent reclassifications.
+- "aid_ok": is the aid claim accurate and not exaggerated? (null if "-" or unsure)
+
+{listing}
+
+Return ONLY a JSON object, no code fences:
+{{"checks": [{{"i": 0, "exists": true, "location_ok": true, "division": "NCAA Division III", "aid_ok": null}}, ...]}}
+with one entry per line, in order."""
+    data = _parse_json(await _call_llm(prompt, max_tokens=150 * len(items) + 400))
+    checks = data.get("checks") or []
+    if len(checks) != len(items):
+        raise ValueError("recommendation fact-check returned an unexpected number of results")
+    removed = 0
+    for (g, c), chk in zip(items, checks):
+        chk = chk if isinstance(chk, dict) else {}
+        if chk.get("exists") is not True:
+            c["_drop"] = True
+            removed += 1
+            continue
+        if chk.get("location_ok") is False:
+            c["location"] = ""
+        if c["division"] or g["key"] == "athletics":
+            claimed, checked = _division_key(c["division"]), _division_key(str(chk.get("division") or ""))
+            confirmed = claimed is not None and claimed == checked
+            if g["key"] == "athletics" and not confirmed:
+                # The division is the point of an athletics pick: keep it only when the independent check
+                # states the same division (unknown or different → drop).
+                c["_drop"] = True
+                removed += 1
+                continue
+            if not confirmed:
+                c["division"], c["athletics_note"] = "", ""
+        if chk.get("aid_ok") is False:
+            c["aid_note"] = ""
+    for g in groups:
+        g["colleges"] = [c for c in g["colleges"] if not c.pop("_drop", False)]
+    return [g for g in groups if g["colleges"]], removed

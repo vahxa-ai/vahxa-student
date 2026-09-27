@@ -283,6 +283,7 @@ class CollegeProfile(Base):
     gpa: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)            # free text, e.g. "3.8 unweighted"
     test_scores: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)   # e.g. "PSAT 1250"
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    preferences_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # location, size, aid need, athletics…
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -336,3 +337,13 @@ class Achievement(Base):
     weeks_per_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CollegeRecommendation(Base):
+    """A student's latest AI college recommendations (athletics / financial aid / academics), fact-checked."""
+    __tablename__ = "college_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), unique=True, nullable=False, index=True)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

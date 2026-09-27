@@ -68,12 +68,30 @@ async def _call_llm(prompt: str, max_tokens: int = 2048) -> str:
         "temperature": 0.7,
         "max_tokens": max_tokens,
     }
-    headers = {"Authorization": f"Bearer {await gcp.access_token()}"}
-    async with httpx.AsyncClient(timeout=180) as client:
-        response = await client.post(_chat_completions_url(), json=payload, headers=headers)
-    if response.is_error:
-        raise RuntimeError(f"Vertex AI request failed ({response.status_code}): {response.text[:500]}")
-    return response.json()["choices"][0]["message"]["content"]
+    last_error = ""
+    for attempt in range(_LLM_ATTEMPTS):
+        if attempt:
+            await asyncio.sleep(_LLM_BACKOFF_SECONDS * attempt)
+        headers = {"Authorization": f"Bearer {await gcp.access_token()}"}
+        try:
+            async with httpx.AsyncClient(timeout=180) as client:
+                response = await client.post(_chat_completions_url(), json=payload, headers=headers)
+        except httpx.TransportError as e:            # dropped connection, timeout, DNS…: retry
+            last_error = f"{type(e).__name__}: {e}"
+            continue
+        if response.status_code in _RETRYABLE_STATUS:  # rate limited / temporarily unavailable: retry
+            last_error = f"HTTP {response.status_code}"
+            continue
+        if response.is_error:
+            raise RuntimeError(f"Vertex AI request failed ({response.status_code}): {response.text[:500]}")
+        return response.json()["choices"][0]["message"]["content"]
+    # RuntimeError is mapped to a clean 502 by every AI route
+    raise RuntimeError(f"The AI service is temporarily unavailable — please try again. ({last_error})")
+
+
+_LLM_ATTEMPTS = 3
+_LLM_BACKOFF_SECONDS = 2
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 def _build_plan_prompt(

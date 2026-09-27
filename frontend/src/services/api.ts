@@ -23,6 +23,7 @@ import type {
   CollegeEntry,
   CollegeCategory,
   Achievement,
+  Recommendations,
 } from "../types";
 
 // Same-origin "/api" (the dev server proxies it to the backend), so the session cookie always applies.
@@ -196,6 +197,8 @@ export const collegeApi = {
   updateAchievement: (id: number, data: AchievementInput) =>
     api.patch<Achievement>(`/college/achievements/${id}`, data).then((r) => r.data),
   deleteAchievement: (id: number) => api.delete(`/college/achievements/${id}`),
+  getRecommendations: () => api.get<Recommendations | null>("/college/recommendations").then((r) => r.data),
+  generateRecommendations: () => api.post<Recommendations>("/college/recommendations").then((r) => r.data),
   // admins
   adminGuides: () => api.get<AdmissionsGuide[]>("/college/admin/guides").then((r) => r.data),
   adminRegenerateGuide: (countryKey: string) =>
