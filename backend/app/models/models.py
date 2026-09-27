@@ -1,6 +1,6 @@
 from datetime import datetime, date, time
 from typing import Optional
-from sqlalchemy import String, Integer, Boolean, DateTime, Date, Time, Text, ForeignKey, Enum as SAEnum
+from sqlalchemy import Float, String, Integer, Boolean, DateTime, Date, Time, Text, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
@@ -269,3 +269,70 @@ class SampleTestAttempt(Base):
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     marked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)   # after self-marking written answers
     timed_out: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class CollegeProfile(Base):
+    """A student's college goals — used to personalize the roadmap and college summaries."""
+    __tablename__ = "college_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), unique=True, nullable=False, index=True)
+    intended_majors: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    interests: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    career_goals: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    gpa: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)            # free text, e.g. "3.8 unweighted"
+    test_scores: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)   # e.g. "PSAT 1250"
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AdmissionsGuide(Base):
+    """How admissions works in one country — generated once and shared by every student in that country."""
+    __tablename__ = "admissions_guides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    country_key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)                  # {title, chapters: [...]}
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CollegeRoadmap(Base):
+    """A student's personalized plan from their current grade through applications, with checklist progress."""
+    __tablename__ = "college_roadmaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), unique=True, nullable=False, index=True)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)                  # {overview, stages: [...]}
+    completed_json: Mapped[str] = mapped_column(Text, default="{}")                  # {milestone id: completed ISO time}
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CollegeEntry(Base):
+    """A college on the student's list, with an optional AI summary of requirements and fit."""
+    __tablename__ = "college_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), default="undecided")           # reach | target | likely | undecided
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    summary_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    summary_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Achievement(Base):
+    """An extracurricular, award, leadership role, volunteering or summer program — for application activity lists."""
+    __tablename__ = "achievements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(30), default="extracurricular")
+    organization: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    role: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    grades: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)          # e.g. "9,10,11"
+    hours_per_week: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    weeks_per_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -313,3 +313,100 @@ export interface SampleTestAttempt {
   total_score: number | null;
   sections: STSection[];
 }
+
+// --- College prep ---
+
+export interface CollegeProfile {
+  intended_majors: string | null;
+  interests: string | null;
+  career_goals: string | null;
+  gpa: string | null;
+  test_scores: string | null;
+  notes: string | null;
+  updated_at?: string | null;
+}
+
+export interface GuideChapter {
+  id: string;
+  title: string;
+  summary: string;
+  body: string;            // markdown
+  key_takeaways: string[];
+}
+
+export interface AdmissionsGuide {
+  country: string;
+  title: string;
+  intro: string;
+  chapters: GuideChapter[];
+  generated_at: string;
+}
+
+export type RoadmapCategory = "academics" | "testing" | "activities" | "applications" | "finances" | "summer" | "wellbeing";
+
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  detail: string;
+  category: RoadmapCategory;
+  completed_at: string | null;
+}
+
+export interface RoadmapStage {
+  id: string;
+  label: string;
+  focus: string;
+  goals: string[];
+  milestones: RoadmapMilestone[];
+}
+
+export interface Roadmap {
+  overview: string;
+  stages: RoadmapStage[];
+  generated_at: string;
+  completed: number;
+  total: number;
+}
+
+export type CollegeCategory = "reach" | "target" | "likely" | "undecided";
+
+export interface CollegeSummary {
+  recognized: boolean;
+  official_name: string;
+  location: string;
+  type: string;
+  overview: string;
+  what_they_look_for: string[];
+  typical_requirements: string[];
+  testing_policy: string;
+  application_options: string;
+  selectivity: string;
+  fit_for_student: string;
+  next_steps: string[];
+}
+
+export interface CollegeEntry {
+  id: number;
+  name: string;
+  category: CollegeCategory;
+  notes: string | null;
+  summary: CollegeSummary | null;
+  summary_generated_at: string | null;
+  created_at: string;
+}
+
+export type AchievementCategory =
+  | "extracurricular" | "leadership" | "award" | "volunteer" | "work" | "summer" | "research" | "arts" | "athletics" | "other";
+
+export interface Achievement {
+  id: number;
+  title: string;
+  category: AchievementCategory;
+  organization: string | null;
+  role: string | null;
+  grades: string | null;
+  hours_per_week: number | null;
+  weeks_per_year: number | null;
+  description: string | null;
+  created_at: string;
+}

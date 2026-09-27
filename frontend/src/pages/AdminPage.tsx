@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Loader2, ShieldCheck, ShieldAlert, Users } from "lucide-react";
-import { adminApi, apiErrorMessage, type AdminAction } from "../services/api";
-import type { AdminStudent, StudentStatus } from "../types";
+import { BookOpen, Loader2, RefreshCw, ShieldCheck, ShieldAlert, Users } from "lucide-react";
+import { adminApi, collegeApi, apiErrorMessage, type AdminAction } from "../services/api";
+import type { AdminStudent, AdmissionsGuide, StudentStatus } from "../types";
 
 const TABS: { key: StudentStatus | "all"; label: string }[] = [
   { key: "awaiting_approval", label: "Awaiting approval" },
@@ -93,6 +93,56 @@ const StudentCard: React.FC<{ s: AdminStudent; onChange: (s: AdminStudent) => vo
   );
 };
 
+/** Shared admissions guides (one per country) — admins can regenerate one, e.g. after a process change. */
+const GuidesAdmin: React.FC = () => {
+  const [guides, setGuides] = useState<AdmissionsGuide[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { collegeApi.adminGuides().then(setGuides).catch((err) => setError(apiErrorMessage(err))); }, []);
+
+  const regenerate = async (g: AdmissionsGuide) => {
+    if (!window.confirm(`Rewrite the ${g.country} admissions guide for every student there?`)) return;
+    setBusy(g.country); setError(null);
+    try {
+      const updated = await collegeApi.adminRegenerateGuide(g.country.toLowerCase());
+      setGuides((list) => list && list.map((x) => (x.country === g.country ? updated : x)));
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><BookOpen size={18} className="text-indigo-500" /> Admissions guides</h2>
+      <p className="text-gray-500 text-sm mt-1 mb-3">Created the first time a student in each country opens College Prep.</p>
+      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {!guides ? (
+        <p className="text-sm text-gray-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</p>
+      ) : guides.length === 0 ? (
+        <p className="text-sm text-gray-500">No guides yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {guides.map((g) => (
+            <div key={g.country} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-[12rem]">
+                <p className="text-sm font-semibold text-gray-800">{g.country}</p>
+                <p className="text-xs text-gray-500">{g.chapters.length} chapters · updated {format(new Date(g.generated_at + "Z"), "MMM d, yyyy")}</p>
+              </div>
+              <button onClick={() => regenerate(g)} disabled={busy !== null}
+                className="inline-flex items-center gap-1.5 text-xs font-medium border border-indigo-200 text-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-50 disabled:opacity-50">
+                {busy === g.country ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Regenerate
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
+
 export const AdminPage: React.FC = () => {
   const [tab, setTab] = useState<StudentStatus | "all">("awaiting_approval");
   const [students, setStudents] = useState<AdminStudent[] | null>(null);
@@ -129,6 +179,7 @@ export const AdminPage: React.FC = () => {
       ) : (
         <div className="space-y-3">{students.map((s) => <StudentCard key={s.id} s={s} onChange={onChange} />)}</div>
       )}
+      <GuidesAdmin />
     </div>
   );
 };

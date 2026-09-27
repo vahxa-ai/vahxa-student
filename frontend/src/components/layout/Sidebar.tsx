@@ -2,7 +2,7 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import {
   UserRound, ListChecks, Sparkles, Home,
-  Settings, GraduationCap, Zap, Users, ShieldCheck, LogOut, X,
+  Settings, GraduationCap, Zap, Users, ShieldCheck, LogOut, X, Compass,
 } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { authApi } from "../../services/api";
@@ -14,6 +14,7 @@ const STUDENT_NAV = [
   { to: "/activities",    icon: ListChecks,   label: "Activities"    },
   { to: "/study-planner", icon: GraduationCap,label: "Academic Tracker" },
   { to: "/schedule",      icon: Sparkles,     label: "AI Schedule"   },
+  { to: "/college",       icon: Compass,      label: "College Prep"  },
   { to: "/profile",       icon: UserRound,    label: "My Profile"    },
   { to: "/settings",      icon: Settings,     label: "Settings"      },
 ];

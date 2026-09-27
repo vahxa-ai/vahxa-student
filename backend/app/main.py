@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.db.database import init_db
 from app.api.routes import (
     student, activities, schedule, subjects, deadlines, curriculum, auth, onboarding, consent, admin, quizzes,
-    sample_tests,
+    sample_tests, college,
 )
 
 
@@ -57,6 +57,7 @@ app.include_router(deadlines.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")
 app.include_router(quizzes.router, prefix="/api")
 app.include_router(sample_tests.router, prefix="/api")
+app.include_router(college.router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -539,3 +539,118 @@ class SampleTestSubmitRequest(BaseModel):
 
 class SelfMarkRequest(BaseModel):
     marks: dict[str, int]
+
+
+# --- College prep ---
+
+class CollegeProfileIn(BaseModel):
+    intended_majors: Optional[str] = Field(default=None, max_length=300)
+    interests: Optional[str] = Field(default=None, max_length=2000)
+    career_goals: Optional[str] = Field(default=None, max_length=2000)
+    gpa: Optional[str] = Field(default=None, max_length=40)
+    test_scores: Optional[str] = Field(default=None, max_length=300)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CollegeProfileOut(CollegeProfileIn):
+    updated_at: Optional[datetime] = None
+
+
+class GuideChapter(BaseModel):
+    id: str
+    title: str
+    summary: str
+    body: str
+    key_takeaways: list[str]
+
+
+class AdmissionsGuideOut(BaseModel):
+    country: str
+    title: str
+    intro: str
+    chapters: list[GuideChapter]
+    generated_at: datetime
+
+
+class RoadmapMilestone(BaseModel):
+    id: str
+    title: str
+    detail: str
+    category: str
+    completed_at: Optional[datetime] = None
+
+
+class RoadmapStage(BaseModel):
+    id: str
+    label: str
+    focus: str
+    goals: list[str]
+    milestones: list[RoadmapMilestone]
+
+
+class RoadmapOut(BaseModel):
+    overview: str
+    stages: list[RoadmapStage]
+    generated_at: datetime
+    completed: int
+    total: int
+
+
+class MilestoneUpdate(BaseModel):
+    completed: bool
+
+
+class CollegeSummary(BaseModel):
+    recognized: bool
+    official_name: str = ""
+    location: str = ""
+    type: str = ""
+    overview: str = ""
+    what_they_look_for: list[str] = []
+    typical_requirements: list[str] = []
+    testing_policy: str = ""
+    application_options: str = ""
+    selectivity: str = ""
+    fit_for_student: str = ""
+    next_steps: list[str] = []
+
+
+class CollegeEntryIn(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    category: str = Field(default="undecided", pattern="^(reach|target|likely|undecided)$")
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CollegeEntryUpdate(BaseModel):
+    category: Optional[str] = Field(default=None, pattern="^(reach|target|likely|undecided)$")
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CollegeEntryOut(BaseModel):
+    id: int
+    name: str
+    category: str
+    notes: Optional[str]
+    summary: Optional[CollegeSummary]
+    summary_generated_at: Optional[datetime]
+    created_at: datetime
+
+
+class AchievementIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    category: str = Field(default="extracurricular",
+                          pattern="^(extracurricular|leadership|award|volunteer|work|summer|research|arts|athletics|other)$")
+    organization: Optional[str] = Field(default=None, max_length=200)
+    role: Optional[str] = Field(default=None, max_length=200)
+    grades: Optional[str] = Field(default=None, max_length=40)
+    hours_per_week: Optional[float] = Field(default=None, ge=0, le=100)
+    weeks_per_year: Optional[int] = Field(default=None, ge=0, le=52)
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+
+class AchievementOut(AchievementIn):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

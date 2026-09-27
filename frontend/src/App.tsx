@@ -10,6 +10,7 @@ import { SubjectPage } from "./pages/SubjectPage";
 import { QuizPage } from "./pages/QuizPage";
 import { SampleTestPage } from "./pages/SampleTestPage";
 import { PrintNotesPage } from "./pages/PrintNotesPage";
+import { CollegePrepPage } from "./pages/CollegePrepPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ConsentPage } from "./pages/ConsentPage";
 import { ParentPage } from "./pages/ParentPage";
@@ -30,6 +31,7 @@ const App: React.FC = () => (
         <Route path="/study-planner/subjects/:subjectId/attempts/:attemptId" element={<QuizPage />} />
         <Route path="/study-planner/subjects/:subjectId/sample-tests/:attemptId" element={<SampleTestPage />} />
         <Route path="/study-planner/subjects/:subjectId/print" element={<PrintNotesPage />} />
+        <Route path="/college" element={<CollegePrepPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/parent" element={<ParentPage />} />
         <Route path="/admin" element={<AdminPage />} />

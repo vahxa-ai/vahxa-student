@@ -17,6 +17,12 @@ import type {
   AttemptSummary,
   SampleTestList,
   SampleTestAttempt,
+  CollegeProfile,
+  AdmissionsGuide,
+  Roadmap,
+  CollegeEntry,
+  CollegeCategory,
+  Achievement,
 } from "../types";
 
 // Same-origin "/api" (the dev server proxies it to the backend), so the session cookie always applies.
@@ -165,6 +171,35 @@ export const sampleTestApi = {
     api.post<SampleTestAttempt>(`/sample-test-attempts/${attemptId}/submit`, { answers }).then((r) => r.data),
   selfMark: (attemptId: number, marks: Record<string, number>) =>
     api.post<SampleTestAttempt>(`/sample-test-attempts/${attemptId}/self-mark`, { marks }).then((r) => r.data),
+};
+
+// --- College prep ---
+export type AchievementInput = Omit<Achievement, "id" | "created_at">;
+export const collegeApi = {
+  getProfile: () => api.get<CollegeProfile>("/college/profile").then((r) => r.data),
+  saveProfile: (data: Partial<CollegeProfile>) => api.put<CollegeProfile>("/college/profile", data).then((r) => r.data),
+  getGuide: () => api.get<AdmissionsGuide | null>("/college/guide").then((r) => r.data),
+  createGuide: () => api.post<AdmissionsGuide>("/college/guide").then((r) => r.data),
+  getRoadmap: () => api.get<Roadmap | null>("/college/roadmap").then((r) => r.data),
+  generateRoadmap: () => api.post<Roadmap>("/college/roadmap").then((r) => r.data),
+  setMilestone: (id: string, completed: boolean) =>
+    api.patch<Roadmap>(`/college/roadmap/milestones/${encodeURIComponent(id)}`, { completed }).then((r) => r.data),
+  colleges: () => api.get<CollegeEntry[]>("/college/colleges").then((r) => r.data),
+  addCollege: (data: { name: string; category: CollegeCategory; notes?: string | null }) =>
+    api.post<CollegeEntry>("/college/colleges", data).then((r) => r.data),
+  updateCollege: (id: number, data: { category?: CollegeCategory; notes?: string | null }) =>
+    api.patch<CollegeEntry>(`/college/colleges/${id}`, data).then((r) => r.data),
+  deleteCollege: (id: number) => api.delete(`/college/colleges/${id}`),
+  summarizeCollege: (id: number) => api.post<CollegeEntry>(`/college/colleges/${id}/summary`).then((r) => r.data),
+  achievements: () => api.get<Achievement[]>("/college/achievements").then((r) => r.data),
+  addAchievement: (data: AchievementInput) => api.post<Achievement>("/college/achievements", data).then((r) => r.data),
+  updateAchievement: (id: number, data: AchievementInput) =>
+    api.patch<Achievement>(`/college/achievements/${id}`, data).then((r) => r.data),
+  deleteAchievement: (id: number) => api.delete(`/college/achievements/${id}`),
+  // admins
+  adminGuides: () => api.get<AdmissionsGuide[]>("/college/admin/guides").then((r) => r.data),
+  adminRegenerateGuide: (countryKey: string) =>
+    api.post<AdmissionsGuide>(`/college/admin/guides/${encodeURIComponent(countryKey)}/regenerate`).then((r) => r.data),
 };
 
 /** Human-readable message from an API error (server `detail` when present). */
