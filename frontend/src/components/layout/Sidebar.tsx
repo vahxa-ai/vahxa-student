@@ -44,12 +44,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ mode, open, onClose }) => {
     <div
       aria-hidden="true"
       onClick={onClose}
-      className={`fixed inset-0 z-30 bg-black/40 transition-opacity lg:hidden ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+      className={`print:hidden fixed inset-0 z-30 bg-black/40 transition-opacity lg:hidden ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
     />
     <aside
       id="app-sidebar"
       aria-label="Main navigation"
-      className={`fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] bg-white border-r border-gray-100 flex flex-col shadow-xl
+      className={`print:hidden fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] bg-white border-r border-gray-100 flex flex-col shadow-xl
         transform transition-transform duration-200 ease-out pb-[env(safe-area-inset-bottom)]
         lg:static lg:z-auto lg:w-64 lg:max-w-none lg:min-h-screen lg:shadow-sm lg:translate-x-0
         ${open ? "translate-x-0" : "-translate-x-full"}`}

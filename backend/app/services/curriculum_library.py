@@ -134,6 +134,30 @@ class FirestoreLibrary:
 
         return await txn(self._client.transaction())
 
+    async def append_unit_item(self, key: str, position: int, title: str, field: str, item: dict,
+                               limit: int, at: str) -> Optional[int]:
+        """Append to a list field of one unit; returns the new list length, or None if not appended."""
+        from google.cloud import firestore
+        ref = self._collection().document(key)
+
+        @firestore.async_transactional
+        async def txn(transaction):
+            snap = await ref.get(transaction=transaction)
+            if not snap.exists:
+                return None
+            units = snap.to_dict().get("units", [])
+            if position >= len(units) or units[position].get("title") != title:
+                return None
+            items = list(units[position].get(field) or [])
+            if len(items) >= limit:
+                return None
+            items.append(item)
+            units[position][field] = items
+            transaction.update(ref, {"units": units, "updated_at": at})
+            return len(items)
+
+        return await txn(self._client.transaction())
+
 
 _backend: Optional[FirestoreLibrary] = FirestoreLibrary()
 
@@ -172,7 +196,8 @@ async def publish(key: str, cat: dict, display: dict, framework: Optional[str], 
             "framework": framework,
             "units": [
                 {"title": u["title"], "overview": u.get("overview"), "details": None, "details_generated_at": None,
-                 "practice": None, "practice_generated_at": None, "quiz": None, "quiz_generated_at": None}
+                 "practice": None, "practice_generated_at": None, "quiz": None, "quiz_generated_at": None,
+                 "sample_tests": []}
                 for u in units
             ],
             "model": settings.vertex_model,
@@ -203,3 +228,14 @@ async def publish_unit_practice(key: str, position: int, title: str, practice: l
 
 async def publish_unit_quiz(key: str, position: int, title: str, quiz: list[dict]) -> None:
     await _publish_unit_fields(key, position, title, "quiz", quiz)
+
+
+async def publish_sample_test(key: str, position: int, title: str, paper: dict, limit: int) -> Optional[int]:
+    """Append a sample test paper to the shared unit; returns its 1-based number in the library, if stored."""
+    if not _enabled():
+        return None
+    try:
+        return await _backend.append_unit_item(key, position, title, "sample_tests", paper, limit, _now())
+    except Exception as e:
+        log.warning("Curriculum library sample test publish failed: %s", e)
+        return None

@@ -8,7 +8,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import Subject, CurriculumUnit, Student
+from app.models.models import Subject, CurriculumUnit, Student, SampleTest
 from app.schemas.schemas import CurriculumOut, CurriculumUnitOut, UnitDetails, PracticeQuestion
 from app.services import ai_service, curriculum_library
 from app.api.deps import get_approved_student
@@ -130,6 +130,9 @@ async def ensure_quiz_banks(
 
 
 async def _replace_units(subject: Subject, units: list[dict], db: AsyncSession) -> None:
+    # Sample papers belong to the old units (attempts keep their own snapshot of the paper)
+    await db.execute(delete(SampleTest).where(
+        SampleTest.unit_id.in_(select(CurriculumUnit.id).where(CurriculumUnit.subject_id == subject.id))))
     await db.execute(delete(CurriculumUnit).where(CurriculumUnit.subject_id == subject.id))
     for i, u in enumerate(units):
         details, practice = u.get("details"), u.get("practice")

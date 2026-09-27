@@ -6,8 +6,8 @@ import {
   MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check, Users, Zap, HelpCircle, ClipboardCheck, Timer, Trophy,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
-import { subjectApi, curriculumApi, quizApi, apiErrorMessage } from "../services/api";
-import type { Subject, Curriculum, CurriculumUnit, PracticeQuestion, AttemptSummary } from "../types";
+import { subjectApi, curriculumApi, quizApi, sampleTestApi, apiErrorMessage } from "../services/api";
+import type { Subject, Curriculum, CurriculumUnit, PracticeQuestion, AttemptSummary, SampleTestList } from "../types";
 
 // ─── Practice questions ───────────────────────────────────────────────────────
 
@@ -140,6 +140,47 @@ export const SubjectPage: React.FC = () => {
   const [testError, setTestError] = useState<string | null>(null);
   const [quizBusyId, setQuizBusyId] = useState<number | null>(null);
   const [quizErrors, setQuizErrors] = useState<Record<number, string>>({});
+
+  // sample tests (mock exam papers), loaded per unit when it's opened
+  const [sampleLists, setSampleLists] = useState<Record<number, SampleTestList>>({});
+  const [sampleBusy, setSampleBusy] = useState<{ unitId: number; what: "load" | "generate" | "start" } | null>(null);
+  const [sampleErrors, setSampleErrors] = useState<Record<number, string>>({});
+
+  const loadSampleTests = async (unit: CurriculumUnit) => {
+    setSampleBusy({ unitId: unit.id, what: "load" });
+    try {
+      const list = await sampleTestApi.list(subjectId, unit.id);
+      setSampleLists((s) => ({ ...s, [unit.id]: list }));
+    } catch (err) {
+      setSampleErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
+    } finally {
+      setSampleBusy(null);
+    }
+  };
+
+  const generateSampleTest = async (unit: CurriculumUnit) => {
+    setSampleBusy({ unitId: unit.id, what: "generate" });
+    setSampleErrors(({ [unit.id]: _, ...rest }) => rest);
+    try {
+      const list = await sampleTestApi.generate(subjectId, unit.id);
+      setSampleLists((s) => ({ ...s, [unit.id]: list }));
+    } catch (err) {
+      setSampleErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
+    } finally {
+      setSampleBusy(null);
+    }
+  };
+
+  const startSampleTest = async (unit: CurriculumUnit, testId: number, timed: boolean) => {
+    setSampleBusy({ unitId: unit.id, what: "start" });
+    try {
+      const attempt = await sampleTestApi.start(testId, timed);
+      navigate(`/study-planner/subjects/${subjectId}/sample-tests/${attempt.id}`);
+    } catch (err) {
+      setSampleErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
+      setSampleBusy(null);
+    }
+  };
 
   useEffect(() => {
     quizApi.history(subjectId).then(setHistory).catch(() => setHistory([]));
@@ -278,6 +319,7 @@ export const SubjectPage: React.FC = () => {
   const toggleUnit = (unit: CurriculumUnit) => {
     if (openUnitId === unit.id) { setOpenUnitId(null); return; }
     setOpenUnitId(unit.id);
+    if (!sampleLists[unit.id]) loadSampleTests(unit);
     if (!unit.details) {
       if (loadingUnitId === null) loadUnitNotes(unit);
     } else if (!unit.practice && practiceLoadingId === null) {
@@ -610,6 +652,65 @@ export const SubjectPage: React.FC = () => {
                                 <RefreshCw size={11} /> New quiz questions
                               </button>
                             )}
+                          </section>
+
+                          <section className="mt-4 rounded-xl border border-sky-100 bg-sky-50/40 p-4">
+                            <h4 className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                              <FileText size={13} className="text-sky-600" /> Sample tests
+                            </h4>
+                            <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                              Full mock unit tests: multiple choice, short answers and extended problems, with a marking scheme.
+                            </p>
+                            {!sampleLists[unit.id] ? (
+                              sampleBusy?.unitId === unit.id && sampleBusy.what === "load"
+                                ? <p className="text-xs text-gray-400 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Loading…</p>
+                                : <button onClick={() => loadSampleTests(unit)} className="text-xs text-sky-700 hover:underline">Show sample tests</button>
+                            ) : (
+                              <div className="space-y-2">
+                                {sampleLists[unit.id].tests.map((t) => (
+                                  <div key={t.id} className="rounded-lg bg-white border border-gray-100 px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                    <div className="flex-1 min-w-[10rem]">
+                                      <p className="text-sm font-semibold text-gray-800">Sample Test {t.number}</p>
+                                      <p className="text-xs text-gray-500">
+                                        {t.total_marks} marks · {t.duration_minutes} min · {t.sections.map((s) => s.questions).reduce((a, b) => a + b, 0)} questions
+                                        {t.best_percent !== null && <> · best <b className={t.best_percent >= 75 ? "text-emerald-600" : t.best_percent >= 50 ? "text-amber-600" : "text-rose-600"}>{t.best_percent}%</b></>}
+                                      </p>
+                                    </div>
+                                    {t.in_progress_attempt_id ? (
+                                      <Link to={`/study-planner/subjects/${subjectId}/sample-tests/${t.in_progress_attempt_id}`}
+                                        className="text-xs font-semibold bg-sky-600 text-white rounded-lg px-3 py-2 hover:bg-sky-700">Resume</Link>
+                                    ) : (
+                                      <div className="flex gap-1.5">
+                                        <button onClick={() => startSampleTest(unit, t.id, false)} disabled={sampleBusy !== null}
+                                          className="text-xs font-semibold bg-sky-600 text-white rounded-lg px-3 py-2 hover:bg-sky-700 disabled:opacity-50">
+                                          {t.attempts ? "Retake" : "Start"}
+                                        </button>
+                                        <button onClick={() => startSampleTest(unit, t.id, true)} disabled={sampleBusy !== null}
+                                          className="inline-flex items-center gap-1 text-xs font-medium border border-sky-200 text-sky-700 rounded-lg px-2.5 py-2 hover:bg-sky-50 disabled:opacity-50">
+                                          <Timer size={12} /> Timed
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                                {sampleLists[unit.id].tests.length === 0 && (
+                                  <p className="text-xs text-gray-500">No sample tests for this unit yet.</p>
+                                )}
+                                {sampleLists[unit.id].can_generate && (
+                                  sampleBusy?.unitId === unit.id && sampleBusy.what === "generate" ? (
+                                    <p className="text-xs text-gray-500 flex items-center gap-1.5 pt-1">
+                                      <Loader2 size={12} className="animate-spin text-sky-600" /> Writing and checking a test paper — this takes 1–2 minutes…
+                                    </p>
+                                  ) : (
+                                    <button onClick={() => generateSampleTest(unit)} disabled={sampleBusy !== null}
+                                      className="text-xs font-medium text-sky-700 hover:underline disabled:opacity-40 pt-1">
+                                      + {sampleLists[unit.id].tests.length ? "Write another sample test" : "Write a sample test"}
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            )}
+                            {sampleErrors[unit.id] && <p className="text-sm text-red-600 mt-2">{sampleErrors[unit.id]}</p>}
                           </section>
 
                           <div className="flex justify-end mt-4">

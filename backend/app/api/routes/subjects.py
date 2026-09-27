@@ -4,7 +4,7 @@ from sqlalchemy import select, delete
 
 from app.api.deps import get_approved_student
 from app.db.database import get_db
-from app.models.models import Subject, Student, QuizAttempt
+from app.models.models import Subject, Student, QuizAttempt, SampleTest, SampleTestAttempt, CurriculumUnit
 from app.schemas.schemas import SubjectCreate, SubjectUpdate, SubjectOut
 
 router = APIRouter(prefix="/subjects", tags=["subjects"])
@@ -61,4 +61,7 @@ async def delete_subject(subject_id: int, student: Student = Depends(get_approve
     subject = await own_subject(subject_id, student, db)
     # Quiz history goes with the subject (explicit so it also holds where the DB doesn't enforce FK cascades)
     await db.execute(delete(QuizAttempt).where(QuizAttempt.subject_id == subject.id))
+    await db.execute(delete(SampleTestAttempt).where(SampleTestAttempt.subject_id == subject.id))
+    await db.execute(delete(SampleTest).where(
+        SampleTest.unit_id.in_(select(CurriculumUnit.id).where(CurriculumUnit.subject_id == subject.id))))
     await db.delete(subject)

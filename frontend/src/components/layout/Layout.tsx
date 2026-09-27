@@ -59,7 +59,7 @@ export const Layout: React.FC = () => {
 
       <div className="flex-1 min-w-0 flex flex-col min-h-screen">
         {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100 pt-[env(safe-area-inset-top)]">
+        <header className="print:hidden lg:hidden sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100 pt-[env(safe-area-inset-top)]">
           <div className="flex items-center gap-2 px-3 h-14">
             <button
               onClick={() => setMenuOpen(true)}
@@ -81,7 +81,7 @@ export const Layout: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 overflow-x-hidden bg-gradient-to-br from-indigo-50 via-white to-violet-50/30 pb-[env(safe-area-inset-bottom)]">
+        <main className="flex-1 min-w-0 overflow-x-hidden print:bg-none print:bg-white bg-gradient-to-br from-indigo-50 via-white to-violet-50/30 pb-[env(safe-area-inset-bottom)]">
           <Outlet />
         </main>
       </div>

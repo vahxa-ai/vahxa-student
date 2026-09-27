@@ -45,6 +45,8 @@ def project_id() -> Optional[str]:
 
 
 async def access_token() -> str:
+    if not load():
+        raise RuntimeError("Google Cloud credentials are not configured")
     if not _credentials.valid:
         # google-auth refresh is blocking; keep it off the event loop
         await asyncio.to_thread(_credentials.refresh, GoogleAuthRequest())

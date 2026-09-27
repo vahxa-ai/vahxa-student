@@ -1,5 +1,5 @@
 from datetime import datetime, date, time
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel, Field
 import re
 
@@ -447,3 +447,95 @@ class AttemptSummaryOut(BaseModel):
     started_at: datetime
     submitted_at: Optional[datetime]
     timed_out: bool
+
+
+# --- Sample tests (mock exam papers) ---
+
+class SampleTestSectionSummary(BaseModel):
+    title: str
+    type: str
+    questions: int
+    marks: int
+
+
+class SampleTestSummaryOut(BaseModel):
+    id: int
+    number: int
+    title: str
+    duration_minutes: int
+    total_marks: int
+    sections: list[SampleTestSectionSummary]
+    attempts: int = 0
+    best_percent: Optional[int] = None
+    in_progress_attempt_id: Optional[int] = None
+
+
+class SampleTestListOut(BaseModel):
+    tests: list[SampleTestSummaryOut]
+    can_generate: bool
+    limit: int
+
+
+class MarkingPoint(BaseModel):
+    point: str
+    marks: int
+
+
+class STQuestionOut(BaseModel):
+    id: str
+    type: str                                       # mcq | short | long
+    question: str
+    marks: int
+    options: Optional[list[str]] = None             # mcq only
+    your_answer: Optional[Union[int, str]] = None
+    # revealed after submitting
+    correct_answer: Optional[int] = None            # mcq
+    correct: Optional[bool] = None                  # mcq
+    explanation: Optional[str] = None               # mcq
+    model_answer: Optional[str] = None              # written
+    marking_points: Optional[list[MarkingPoint]] = None
+    awarded: Optional[int] = None                   # written: self-marked score
+
+
+class STSectionOut(BaseModel):
+    id: str
+    title: str
+    type: str
+    instructions: str
+    marks: int
+    questions: list[STQuestionOut]
+
+
+class SampleTestAttemptOut(BaseModel):
+    id: int
+    subject_id: int
+    unit_title: str
+    number: int
+    title: str
+    instructions: str
+    duration_minutes: int
+    total_marks: int
+    time_limit_minutes: Optional[int]
+    started_at: datetime
+    expires_at: Optional[datetime]
+    submitted_at: Optional[datetime]
+    marked_at: Optional[datetime]
+    timed_out: bool
+    mcq_score: Optional[int]
+    mcq_marks: int
+    written_score: Optional[int]
+    written_marks: int
+    total_score: Optional[int]                      # once written answers are self-marked
+    sections: list[STSectionOut]
+
+
+class SampleTestStartRequest(BaseModel):
+    timed: bool = False
+
+
+class SampleTestSubmitRequest(BaseModel):
+    answers: dict[str, Optional[Union[int, str]]] = {}
+
+
+class SelfMarkRequest(BaseModel):
+    marks: dict[str, int]

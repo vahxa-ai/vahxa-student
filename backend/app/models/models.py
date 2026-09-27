@@ -233,3 +233,39 @@ class QuizAttempt(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     timed_out: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class SampleTest(Base):
+    """A mock exam paper for one unit (several per unit). Content is AI-generated, verified, and shared
+    through the curriculum library; the paper JSON includes the answer key and marking scheme."""
+    __tablename__ = "sample_tests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("curriculum_units.id", ondelete="CASCADE"), nullable=False, index=True)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)               # Sample Test 1, 2, ...
+    paper_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SampleTestAttempt(Base):
+    """A student's attempt at a sample test. The paper is snapshotted so history survives regeneration."""
+    __tablename__ = "sample_test_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), nullable=False, index=True)
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False, index=True)
+    unit_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)        # informational; unit may be regenerated
+    sample_test_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    unit_title: Mapped[str] = mapped_column(String(200), nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    paper_json: Mapped[str] = mapped_column(Text, nullable=False)
+    answers_json: Mapped[str] = mapped_column(Text, default="{}")                # {question id: choice index | text}
+    self_marks_json: Mapped[str] = mapped_column(Text, default="{}")             # {question id: marks awarded}
+    mcq_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    written_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_marks: Mapped[int] = mapped_column(Integer, nullable=False)
+    time_limit_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    marked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)   # after self-marking written answers
+    timed_out: Mapped[bool] = mapped_column(Boolean, default=False)

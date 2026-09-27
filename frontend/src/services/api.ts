@@ -15,6 +15,8 @@ import type {
   Attempt,
   AttemptQuestion,
   AttemptSummary,
+  SampleTestList,
+  SampleTestAttempt,
 } from "../types";
 
 // Same-origin "/api" (the dev server proxies it to the backend), so the session cookie always applies.
@@ -147,6 +149,22 @@ export const quizApi = {
     api.post<Attempt>(`/attempts/${attemptId}/submit`, answers ? { answers } : {}).then((r) => r.data),
   history: (subjectId: number) =>
     api.get<AttemptSummary[]>(`/subjects/${subjectId}/attempts`).then((r) => r.data),
+};
+
+// --- Sample tests (mock exam papers) ---
+export const sampleTestApi = {
+  list: (subjectId: number, unitId: number) =>
+    api.get<SampleTestList>(`/subjects/${subjectId}/curriculum/units/${unitId}/sample-tests`).then((r) => r.data),
+  /** Write a new paper for the unit (shared with the student's category). */
+  generate: (subjectId: number, unitId: number) =>
+    api.post<SampleTestList>(`/subjects/${subjectId}/curriculum/units/${unitId}/sample-tests`).then((r) => r.data),
+  start: (testId: number, timed: boolean) =>
+    api.post<SampleTestAttempt>(`/sample-tests/${testId}/attempts`, { timed }).then((r) => r.data),
+  get: (attemptId: number) => api.get<SampleTestAttempt>(`/sample-test-attempts/${attemptId}`).then((r) => r.data),
+  submit: (attemptId: number, answers: Record<string, number | string | null>) =>
+    api.post<SampleTestAttempt>(`/sample-test-attempts/${attemptId}/submit`, { answers }).then((r) => r.data),
+  selfMark: (attemptId: number, marks: Record<string, number>) =>
+    api.post<SampleTestAttempt>(`/sample-test-attempts/${attemptId}/self-mark`, { marks }).then((r) => r.data),
 };
 
 /** Human-readable message from an API error (server `detail` when present). */

@@ -243,3 +243,73 @@ export interface AttemptSummary {
   submitted_at: string | null;
   timed_out: boolean;
 }
+
+// --- Sample tests (mock exam papers) ---
+
+export type SectionType = "mcq" | "short" | "long";
+
+export interface SampleTestSummary {
+  id: number;
+  number: number;
+  title: string;
+  duration_minutes: number;
+  total_marks: number;
+  sections: { title: string; type: SectionType; questions: number; marks: number }[];
+  attempts: number;
+  best_percent: number | null;
+  in_progress_attempt_id: number | null;
+}
+
+export interface SampleTestList {
+  tests: SampleTestSummary[];
+  can_generate: boolean;
+  limit: number;
+}
+
+export interface STQuestion {
+  id: string;
+  type: SectionType;
+  question: string;
+  marks: number;
+  options: string[] | null;
+  your_answer: number | string | null;
+  // revealed after submitting
+  correct_answer: number | null;
+  correct: boolean | null;
+  explanation: string | null;
+  model_answer: string | null;
+  marking_points: { point: string; marks: number }[] | null;
+  awarded: number | null;
+}
+
+export interface STSection {
+  id: string;
+  title: string;
+  type: SectionType;
+  instructions: string;
+  marks: number;
+  questions: STQuestion[];
+}
+
+export interface SampleTestAttempt {
+  id: number;
+  subject_id: number;
+  unit_title: string;
+  number: number;
+  title: string;
+  instructions: string;
+  duration_minutes: number;
+  total_marks: number;
+  time_limit_minutes: number | null;
+  started_at: string;
+  expires_at: string | null;
+  submitted_at: string | null;
+  marked_at: string | null;
+  timed_out: boolean;
+  mcq_score: number | null;
+  mcq_marks: number;
+  written_score: number | null;
+  written_marks: number;
+  total_score: number | null;
+  sections: STSection[];
+}

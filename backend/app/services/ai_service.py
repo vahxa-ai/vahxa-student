@@ -2,6 +2,7 @@
 AI plan generation and deadline reminders using Gemma 4 on Google Vertex AI.
 Falls back gracefully if Vertex AI credentials are not configured.
 """
+import asyncio
 import json
 import re
 from datetime import date, datetime, time, timedelta
@@ -670,15 +671,184 @@ async def _verify_quiz(bank: list[dict]) -> list[dict]:
         f"Question {i}:\n{q['question']}\n" + "\n".join(f"  {j}) {o}" for j, o in enumerate(q["options"]))
         for i, q in enumerate(bank)
     )
-    prompt = f"""You are a meticulous exam checker. Solve each multiple-choice question below independently and
-carefully (work through any calculation). For each question give the index (0-3) of the single correct option,
-or -1 if no option is correct or more than one option is correct.
+    prompt = f"""You are a meticulous exam checker. Solve each multiple-choice question below independently, from
+scratch. Do not trust the options: first work out the answer yourself (for calculations, find EVERY unknown and
+substitute your result back into the original equations to check it), then compare with the options.
+For each question give the index (0-3) of the single correct option, or -1 if no option is fully correct or more
+than one option is correct.
 
 {listing}
 
-Return ONLY a JSON object, no markdown: {{"answers": [index for question 0, index for question 1, ...]}}"""
-    data = _parse_json(await _call_llm(prompt, max_tokens=1500))
-    solved = data.get("answers", [])
+Return ONLY a JSON object, no markdown:
+{{"solutions": [{{"q": 0, "working": "brief working, including the check", "answer": index}}, ...]}}
+with one entry per question, in order."""
+    data = _parse_json(await _call_llm(prompt, max_tokens=250 * len(bank) + 500))
+    solved = data.get("solutions", [])
     if not isinstance(solved, list) or len(solved) != len(bank):
         raise ValueError("quiz verification returned an unexpected number of answers")
-    return [q for q, s in zip(bank, solved) if isinstance(s, int) and not isinstance(s, bool) and s == q["answer"]]
+    answers = [s.get("answer") if isinstance(s, dict) else None for s in solved]
+    return [q for q, s in zip(bank, answers) if isinstance(s, int) and not isinstance(s, bool) and s == q["answer"]]
+
+
+# ─── Sample tests (mock exam papers) ──────────────────────────────────────────
+
+_SECTION_TYPES = ("mcq", "short", "long")
+_MIN_PER_SECTION = {"mcq": 4, "short": 2, "long": 1}
+
+
+def _clean_written(q: dict) -> Optional[dict]:
+    question = str(q.get("question", "")).strip()
+    model_answer = str(q.get("model_answer", "")).strip()
+    if not question or not model_answer or _SELF_CORRECTION.search(model_answer):
+        return None
+    points = []
+    for p in q.get("marking_points", []) or []:
+        if isinstance(p, dict) and str(p.get("point", "")).strip():
+            m = p.get("marks", 1)
+            points.append({"point": str(p["point"]).strip(), "marks": m if isinstance(m, int) and not isinstance(m, bool) and 1 <= m <= 5 else 1})
+    marks = sum(p["marks"] for p in points) if points else q.get("marks")
+    if not isinstance(marks, int) or isinstance(marks, bool) or not 1 <= marks <= 10:
+        return None
+    if not points:
+        points = [{"point": "Complete, correct answer as in the model answer", "marks": marks}]
+    return {"question": question, "marks": marks, "model_answer": model_answer, "marking_points": points}
+
+
+async def _verify_written(questions: list[dict]) -> list[dict]:
+    """Keep only written questions whose model answer an independent check confirms is correct."""
+    if not questions:
+        return questions
+    listing = "\n\n".join(f"Question {i}:\n{q['question']}\nModel answer:\n{q['model_answer']}" for i, q in enumerate(questions))
+    prompt = f"""You are a meticulous exam checker. For each question below, first work out the correct answer yourself,
+from scratch (for calculations, find every unknown and substitute back to check). Then judge whether the given model
+answer is fully correct. Minor wording differences are fine; any wrong calculation, wrong fact, missing required
+part or wrong final answer is not.
+
+{listing}
+
+Return ONLY a JSON object, no markdown:
+{{"checks": [{{"q": 0, "working": "brief independent working", "correct": true or false}}, ...]}}
+with one entry per question, in order."""
+    data = _parse_json(await _call_llm(prompt, max_tokens=300 * len(questions) + 500))
+    checks = data.get("checks", [])
+    if not isinstance(checks, list) or len(checks) != len(questions):
+        raise ValueError("written-answer verification returned an unexpected number of verdicts")
+    return [q for q, c in zip(questions, checks) if isinstance(c, dict) and c.get("correct") is True]
+
+
+async def generate_sample_test(
+    student: Student, subject: Subject, unit: CurriculumUnit, details: Optional[dict], avoid: list[str]
+) -> dict:
+    """Return a mock exam paper:
+    {"title", "duration_minutes", "instructions", "total_marks",
+     "sections": [{"id", "title", "type": "mcq"|"short"|"long", "instructions",
+                   "questions": [mcq: {"id","question","options","answer","explanation","marks"} |
+                                 written: {"id","question","marks","model_answer","marking_points":[{"point","marks"}]}]}]}"""
+    if not _vertex_configured():
+        raise AIUnavailableError("Curriculum generation requires Vertex AI (Gemma 4) to be configured.")
+
+    avoid_block = ""
+    if avoid:
+        avoid_block = "Earlier sample tests for this unit already used these questions — write DIFFERENT ones:\n" + \
+            "\n".join(f"  - {a}" for a in avoid[:60])
+
+    prompt = f"""You are an experienced teacher writing a realistic end-of-unit test that a school would give.
+
+{_curriculum_context(student, subject)}
+Curriculum: {subject.curriculum_framework or "not specified"}
+Unit: {unit.title}
+Unit overview: {unit.overview or "—"}
+
+{_notes_block(details)}
+
+{avoid_block}
+
+Write ONE complete sample test for this unit, pitched at the student's grade and curriculum, with three sections:
+- Section A — multiple choice: 8 questions, 1 mark each.
+- Section B — short answer: 4 questions, 2–3 marks each (calculations, definitions, brief explanations).
+- Section C — extended response: 2 questions, 4–8 marks each (multi-step problems for quantitative subjects;
+  analysis / evidence-based responses for others).
+
+Return ONLY a JSON object, no markdown, in exactly this shape:
+{{
+  "title": "short test title",
+  "duration_minutes": 45,
+  "instructions": "instructions to the student (materials allowed, show working, etc.)",
+  "sections": [
+    {{"title": "Section A: Multiple Choice", "type": "mcq", "instructions": "…",
+      "questions": [{{"question": "…", "options": ["…","…","…","…"], "answer": 0, "explanation": "…"}}]}},
+    {{"title": "Section B: Short Answer", "type": "short", "instructions": "…",
+      "questions": [{{"question": "…", "model_answer": "step-by-step model answer",
+                      "marking_points": [{{"point": "what earns the mark", "marks": 1}}]}}]}},
+    {{"title": "Section C: Extended Response", "type": "long", "instructions": "…",
+      "questions": [{{"question": "…", "model_answer": "full worked solution / exemplar answer",
+                      "marking_points": [{{"point": "what earns the mark", "marks": 2}}]}}]}}
+  ]
+}}
+Rules:
+- Multiple choice: exactly 4 distinct, plausible options (based on real mistakes), one correct; "answer" is its
+  0-based index; explanations refer to options by content, never by letter or position.
+- Written questions: marking_points list what earns each mark, like a real mark scheme; a question's marks are
+  the sum of its marking points. Model answers show full working.
+- Questions must be self-contained (include any numbers, data or short passage needed).
+- Work out every answer fully BEFORE writing it. Model answers and explanations must be clean, final and correct —
+  no second-guessing or corrections. Plain text and Unicode math (x², √, π, ≤) — no LaTeX."""
+
+    data = _parse_json(await _call_llm(prompt, max_tokens=9000))
+
+    by_type: dict[str, dict] = {}
+    for sec in data.get("sections", []) or []:
+        if not isinstance(sec, dict) or sec.get("type") not in _SECTION_TYPES or sec["type"] in by_type:
+            continue
+        kind = sec["type"]
+        questions = []
+        for q in sec.get("questions", []) or []:
+            if not isinstance(q, dict):
+                continue
+            if kind == "mcq":
+                options = [str(o).strip() for o in q.get("options", []) if str(o).strip()]
+                answer = q.get("answer")
+                explanation = str(q.get("explanation", "")).strip()
+                if (str(q.get("question", "")).strip() and len(options) == 4 and len({o.lower() for o in options}) == 4
+                        and isinstance(answer, int) and not isinstance(answer, bool) and 0 <= answer < 4
+                        and not _SELF_CORRECTION.search(explanation)):
+                    questions.append({"question": str(q["question"]).strip(), "options": options, "answer": answer,
+                                      "explanation": _strip_positional(explanation), "marks": 1})
+            else:
+                cleaned = _clean_written(q)
+                if cleaned:
+                    questions.append(cleaned)
+        by_type[kind] = {"title": str(sec.get("title") or "").strip(), "type": kind,
+                         "instructions": str(sec.get("instructions") or "").strip(), "questions": questions}
+
+    if set(by_type) != set(_SECTION_TYPES):
+        raise ValueError("sample test is missing a section")
+
+    # Verify all sections in parallel
+    mcq, written = by_type["mcq"]["questions"], by_type["short"]["questions"] + by_type["long"]["questions"]
+    mcq_ok, written_ok = await asyncio.gather(_verify_quiz(mcq), _verify_written(written))
+    written_ids = {id(q) for q in written_ok}
+    by_type["mcq"]["questions"] = mcq_ok
+    for kind in ("short", "long"):
+        by_type[kind]["questions"] = [q for q in by_type[kind]["questions"] if id(q) in written_ids]
+
+    for kind, minimum in _MIN_PER_SECTION.items():
+        if len(by_type[kind]["questions"]) < minimum:
+            raise ValueError(f"too few verified {kind} questions")
+
+    sections, total = [], 0
+    for letter, kind in zip("ABC", _SECTION_TYPES):
+        sec = by_type[kind]
+        for n, q in enumerate(sec["questions"], 1):
+            q["id"] = f"{letter}{n}"
+            total += q["marks"]
+        sections.append({"id": letter, **sec,
+                         "title": sec["title"] or {"mcq": "Multiple Choice", "short": "Short Answer", "long": "Extended Response"}[kind]})
+    duration = data.get("duration_minutes")
+    return {
+        "title": str(data.get("title") or f"{unit.title} — Sample Test").strip()[:200],
+        "duration_minutes": duration if isinstance(duration, int) and not isinstance(duration, bool) and 10 <= duration <= 180 else 45,
+        "instructions": str(data.get("instructions") or "Answer all questions. Show your working.").strip(),
+        "total_marks": total,
+        "sections": sections,
+    }
