@@ -55,11 +55,18 @@ export const subjectApi = {
 export const curriculumApi = {
   get: (subjectId: number) =>
     api.get<Curriculum>(`/subjects/${subjectId}/curriculum`).then((r) => r.data),
-  generate: (subjectId: number) =>
-    api.post<Curriculum>(`/subjects/${subjectId}/curriculum/generate`).then((r) => r.data),
-  generateUnitDetails: (subjectId: number, unitId: number) =>
+  /** force=true regenerates with AI and replaces the shared copy; otherwise the shared library is used when possible. */
+  generate: (subjectId: number, force = false) =>
     api
-      .post<CurriculumUnit>(`/subjects/${subjectId}/curriculum/units/${unitId}/details`)
+      .post<Curriculum>(`/subjects/${subjectId}/curriculum/generate`, null, { params: { force } })
+      .then((r) => r.data),
+  generateUnitDetails: (subjectId: number, unitId: number, force = false) =>
+    api
+      .post<CurriculumUnit>(`/subjects/${subjectId}/curriculum/units/${unitId}/details`, null, { params: { force } })
+      .then((r) => r.data),
+  generateUnitPractice: (subjectId: number, unitId: number, force = false) =>
+    api
+      .post<CurriculumUnit>(`/subjects/${subjectId}/curriculum/units/${unitId}/practice`, null, { params: { force } })
       .then((r) => r.data),
 };
 

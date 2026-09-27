@@ -40,6 +40,18 @@ npm start
    VERTEX_MODEL=google/gemma-4-26b-a4b-it-maas
    ```
 
+### Shared Curriculum Library — Firestore (Optional)
+Curricula are cached in Firestore and reused by every student with the same subject, grade,
+state and country, so the AI is only called on a cache miss or when someone clicks Regenerate.
+Syllabus-based curricula stay private. No personal data is stored.
+1. Enable the API and create the database (location is permanent):
+   ```
+   gcloud services enable firestore.googleapis.com --project=YOUR_PROJECT
+   gcloud firestore databases create --project=YOUR_PROJECT --location=nam5 --type=firestore-native
+   ```
+2. Grant the backend's identity the **Cloud Datastore User** role (`roles/datastore.user`).
+3. Set `CURRICULUM_LIBRARY_ENABLED=false` in `backend/.env` to turn sharing off.
+
 ---
 
 ## Database Migration (SQLite → PostgreSQL)

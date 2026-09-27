@@ -106,6 +106,8 @@ class Subject(Base):
     curriculum_framework: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     curriculum_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)   # "syllabus" | "standards"
     curriculum_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Shared-library category key; None = private (syllabus-based or incomplete profile)
+    curriculum_library_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -126,6 +128,8 @@ class CurriculumUnit(Base):
     overview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     details_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # {summary, key_concepts, formulas}
     details_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    practice_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # [{question, answer, explanation, difficulty}]
+    practice_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     subject: Mapped["Subject"] = relationship("Subject", back_populates="units")
 

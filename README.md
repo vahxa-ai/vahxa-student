@@ -46,11 +46,13 @@ graph TB
 
     subgraph External["☁️ External Services"]
         VERTEX["Google Vertex AI\nGemma 4 26B (serverless)\nOpenAI-compatible API"]
+        FS[("Firestore\nshared curriculum library")]
     end
 
     AxiosClient -->|"HTTP/JSON"| API
     ORM -->|"aiosqlite"| DB
     AI -->|"Chat completion"| VERTEX
+    Routes -->|"lookup / publish"| FS
 
     style Client fill:#EEF2FF,stroke:#6366F1,color:#1e1b4b
     style Server fill:#F0FDF4,stroke:#22C55E,color:#14532d
@@ -127,6 +129,7 @@ erDiagram
 | 📋 **Activity Tracking** | School, sports, medical and hobby activities with recurrence; one-time **special events** highlighted |
 | 📚 **Academic Tracker** | Subjects (difficulty, homework frequency, exam dates) and deadlines with AI-generated reminder plans |
 | 🧭 **Subject Curriculum** | Click a subject to load its units/chapters — inferred from your grade and county/state/country standards, or from a pasted syllabus — with AI summaries, key concepts and formulas per unit |
+| 🤝 **Shared Curriculum Library** | Generated curricula and unit notes are stored in Firestore and reused by every student with the same subject + grade + state + country — the AI is only called on a miss or when Regenerate is clicked |
 | 🤖 **AI Schedule** | Gemma 4 builds a 1-day, multi-day or weekly plan with study sessions, relax time and conflict detection |
 
 ---

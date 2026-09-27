@@ -66,6 +66,15 @@ export interface UnitDetails {
   formulas: Formula[];
 }
 
+export type PracticeDifficulty = "easy" | "medium" | "hard";
+
+export interface PracticeQuestion {
+  question: string;
+  answer: string;          // short final answer
+  explanation: string;     // step-by-step worked solution
+  difficulty: PracticeDifficulty;
+}
+
 export interface CurriculumUnit {
   id: number;
   position: number;
@@ -73,6 +82,9 @@ export interface CurriculumUnit {
   overview: string | null;
   details: UnitDetails | null;
   details_generated_at: string | null;
+  practice: PracticeQuestion[] | null;
+  practice_generated_at: string | null;
+  from_library: boolean;
 }
 
 export interface Curriculum {
@@ -80,6 +92,8 @@ export interface Curriculum {
   framework: string | null;
   source: "syllabus" | "standards" | null;
   generated_at: string | null;
+  shared: boolean;          // linked to the shared library for this student's category
+  from_library: boolean;    // loaded from the shared library on this request (no AI call)
   units: CurriculumUnit[];
 }
 

@@ -159,6 +159,13 @@ class UnitDetails(BaseModel):
     formulas: list[Formula] = []
 
 
+class PracticeQuestion(BaseModel):
+    question: str
+    answer: str                      # short final answer
+    explanation: str = ""            # step-by-step worked solution
+    difficulty: str = "medium"       # easy | medium | hard
+
+
 class CurriculumUnitOut(BaseModel):
     id: int
     position: int
@@ -166,6 +173,9 @@ class CurriculumUnitOut(BaseModel):
     overview: Optional[str]
     details: Optional[UnitDetails]
     details_generated_at: Optional[datetime]
+    practice: Optional[list[PracticeQuestion]] = None
+    practice_generated_at: Optional[datetime] = None
+    from_library: bool = False       # served from the shared library on this request
 
 
 class CurriculumOut(BaseModel):
@@ -173,6 +183,8 @@ class CurriculumOut(BaseModel):
     framework: Optional[str]
     source: Optional[str]            # "syllabus" | "standards"
     generated_at: Optional[datetime]
+    shared: bool = False             # linked to the shared library for this student's category
+    from_library: bool = False       # loaded from the shared library on this request (no AI call)
     units: list[CurriculumUnitOut]
 
 

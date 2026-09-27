@@ -2,18 +2,14 @@
 AI plan generation and deadline reminders using Gemma 4 on Google Vertex AI.
 Falls back gracefully if Vertex AI credentials are not configured.
 """
-import asyncio
 import json
 from datetime import date, datetime, time, timedelta
-from pathlib import Path
 from typing import Optional
 
-import google.auth
 import httpx
-from google.auth.exceptions import DefaultCredentialsError
-from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from app.core.config import settings
+from app.services import gcp
 from app.models.models import Student, Activity, Subject, CurriculumUnit
 
 
@@ -46,46 +42,14 @@ def _describe_student(student: Student) -> str:
     return f"{desc} ({', '.join(details)})" if details else desc
 
 
-_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
-_BACKEND_DIR = Path(__file__).resolve().parents[2]
-_credentials = None
-_project_id: Optional[str] = None
-
-
-def _load_credentials() -> bool:
-    """Load credentials once — the configured key file, else Application Default Credentials.
-    Returns False if no credentials or project are available."""
-    global _credentials, _project_id
-    if _credentials is None:
-        try:
-            if settings.google_credentials_file:
-                key_path = Path(settings.google_credentials_file)
-                if not key_path.is_absolute():
-                    key_path = _BACKEND_DIR / key_path
-                _credentials, adc_project = google.auth.load_credentials_from_file(str(key_path), scopes=_SCOPES)
-            else:
-                _credentials, adc_project = google.auth.default(scopes=_SCOPES)
-        except DefaultCredentialsError:
-            return False
-        _project_id = settings.vertex_project_id or adc_project
-    return bool(_project_id)
-
-
 def _vertex_configured() -> bool:
-    return _load_credentials()
-
-
-async def _access_token() -> str:
-    if not _credentials.valid:
-        # google-auth refresh is blocking; keep it off the event loop
-        await asyncio.to_thread(_credentials.refresh, GoogleAuthRequest())
-    return _credentials.token
+    return gcp.load()
 
 
 def _chat_completions_url() -> str:
     loc = settings.vertex_location
     host = "aiplatform.googleapis.com" if loc == "global" else f"{loc}-aiplatform.googleapis.com"
-    return f"https://{host}/v1/projects/{_project_id}/locations/{loc}/endpoints/openapi/chat/completions"
+    return f"https://{host}/v1/projects/{gcp.project_id()}/locations/{loc}/endpoints/openapi/chat/completions"
 
 
 async def _call_llm(prompt: str, max_tokens: int = 2048) -> str:
@@ -102,7 +66,7 @@ async def _call_llm(prompt: str, max_tokens: int = 2048) -> str:
         "temperature": 0.7,
         "max_tokens": max_tokens,
     }
-    headers = {"Authorization": f"Bearer {await _access_token()}"}
+    headers = {"Authorization": f"Bearer {await gcp.access_token()}"}
     async with httpx.AsyncClient(timeout=180) as client:
         response = await client.post(_chat_completions_url(), json=payload, headers=headers)
     if response.is_error:
@@ -513,3 +477,73 @@ Rules:
             for f in data.get("formulas", []) if isinstance(f, dict) and f.get("expression")
         ],
     }
+
+
+_DIFFICULTIES = ("easy", "medium", "hard")
+
+
+async def generate_unit_practice(
+    student: Student, subject: Subject, unit: CurriculumUnit, details: Optional[dict]
+) -> list[dict]:
+    """Return [{"question", "answer", "explanation", "difficulty"}] — exam-style practice with worked solutions."""
+    if not _vertex_configured():
+        raise AIUnavailableError("Curriculum generation requires Vertex AI (Gemma 4) to be configured.")
+
+    notes = ""
+    if details:
+        concepts = "\n".join(f"  - {c['name']}: {c['explanation']}" for c in details.get("key_concepts", []))
+        formulas = "\n".join(f"  - {f['name']}: {f['expression']}" for f in details.get("formulas", []))
+        notes = f"""Unit notes the student has studied (base your questions on these):
+Summary: {details.get("summary", "")}
+Key concepts:
+{concepts or "  (none)"}
+Formulas:
+{formulas or "  (none)"}"""
+
+    prompt = f"""You are an expert teacher and exam writer helping a student master their curriculum.
+
+{_curriculum_context(student, subject)}
+Curriculum: {subject.curriculum_framework or "not specified"}
+Unit: {unit.title}
+Unit overview: {unit.overview or "—"}
+
+{notes}
+
+Write the most important practice questions for this unit — the kinds of questions that appear on tests
+and that check real understanding, not just recall.
+
+Return ONLY a JSON object, no markdown, in exactly this shape:
+{{
+  "questions": [
+    {{
+      "difficulty": "easy | medium | hard",
+      "question": "the question, self-contained (include any numbers, data or short passage needed)",
+      "answer": "the short final answer",
+      "explanation": "a clear step-by-step worked solution explaining WHY, as a student would need to see it"
+    }}
+  ]
+}}
+Rules:
+- 4–6 questions, ordered from easy to hard; cover the unit's most important concepts and formulas.
+- Mix types as the subject suits: concept checks, calculations/worked problems, applications, and
+  interpretation or short-response questions (for non-quantitative subjects use analysis/evidence questions).
+- For calculations, show each step of working in "explanation" on separate lines; use plain text and
+  Unicode math symbols (e.g. "x² − 5x + 6 = 0", "√", "π", "≤") — no LaTeX.
+- Mention common mistakes in the explanation when relevant.
+- Match the student's grade level and the curriculum. Answers must be correct — double-check calculations."""
+
+    data = _parse_json(await _call_llm(prompt, max_tokens=4000))
+    questions = []
+    for q in data.get("questions", []):
+        if not isinstance(q, dict) or not str(q.get("question", "")).strip() or not str(q.get("answer", "")).strip():
+            continue
+        difficulty = str(q.get("difficulty", "medium")).strip().lower()
+        questions.append({
+            "question": str(q["question"]).strip(),
+            "answer": str(q["answer"]).strip(),
+            "explanation": str(q.get("explanation", "")).strip(),
+            "difficulty": difficulty if difficulty in _DIFFICULTIES else "medium",
+        })
+    if not questions:
+        raise ValueError("model returned no practice questions")
+    return questions

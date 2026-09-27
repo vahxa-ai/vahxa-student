@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     # Optional service-account key file (relative paths resolve from backend/); empty = ADC
     google_credentials_file: str = ""
 
+    # Shared curriculum library (Firestore) — reuse curricula across students in the same category
+    curriculum_library_enabled: bool = True
+    firestore_database: str = "(default)"
+    curriculum_library_collection: str = "curriculum_library"
+
     # CORS
     frontend_url: str = "http://localhost:3000"
 

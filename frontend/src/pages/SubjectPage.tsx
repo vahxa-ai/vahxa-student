@@ -2,11 +2,56 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpen, ChevronDown, FileText, Lightbulb, Loader2,
-  MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check,
+  MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check, Users, Zap, HelpCircle,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { subjectApi, curriculumApi, apiErrorMessage } from "../services/api";
-import type { Subject, Curriculum, CurriculumUnit } from "../types";
+import type { Subject, Curriculum, CurriculumUnit, PracticeQuestion } from "../types";
+
+// ─── Practice questions ───────────────────────────────────────────────────────
+
+const DIFFICULTY_STYLE: Record<PracticeQuestion["difficulty"], string> = {
+  easy:   "bg-emerald-100 text-emerald-700",
+  medium: "bg-amber-100 text-amber-700",
+  hard:   "bg-rose-100 text-rose-700",
+};
+
+const PracticeCard: React.FC<{ q: PracticeQuestion; index: number }> = ({ q, index }) => {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <div className="rounded-lg border border-sky-100 bg-sky-50/40 px-3.5 py-3">
+      <div className="flex items-start gap-2">
+        <span className="text-xs font-bold text-sky-700 mt-0.5 flex-shrink-0">Q{index + 1}</span>
+        <p className="flex-1 text-sm text-gray-800 leading-relaxed whitespace-pre-line">{q.question}</p>
+        <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full flex-shrink-0 ${DIFFICULTY_STYLE[q.difficulty]}`}>
+          {q.difficulty}
+        </span>
+      </div>
+      {revealed ? (
+        <div className="mt-3 ml-6 space-y-2">
+          <p className="text-sm">
+            <span className="font-semibold text-emerald-700">Answer: </span>
+            <span className="text-gray-900 whitespace-pre-line">{q.answer}</span>
+          </p>
+          {q.explanation && (
+            <div className="rounded-md bg-white border border-gray-100 px-3 py-2">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Worked solution</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{q.explanation}</p>
+            </div>
+          )}
+          <button onClick={() => setRevealed(false)} className="text-xs text-gray-400 hover:text-gray-600">Hide answer</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setRevealed(true)}
+          className="mt-2 ml-6 text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
+        >
+          Try it first, then show answer →
+        </button>
+      )}
+    </div>
+  );
+};
 
 // ─── Unit notes ───────────────────────────────────────────────────────────────
 
@@ -74,10 +119,13 @@ export const SubjectPage: React.FC = () => {
 
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [openUnitId, setOpenUnitId] = useState<number | null>(null);
   const [loadingUnitId, setLoadingUnitId] = useState<number | null>(null);
   const [unitErrors, setUnitErrors] = useState<Record<number, string>>({});
+  const [practiceLoadingId, setPracticeLoadingId] = useState<number | null>(null);
+  const [practiceErrors, setPracticeErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
     Promise.all([subjectApi.get(subjectId), curriculumApi.get(subjectId)])
@@ -108,12 +156,20 @@ export const SubjectPage: React.FC = () => {
   };
 
   const generate = async () => {
-    if (curriculum?.units.length && !window.confirm("Regenerate the unit list? Saved notes for every unit will be replaced.")) return;
+    const regenerate = !!curriculum?.units.length;
+    if (regenerate && !window.confirm(
+      curriculum?.shared
+        ? "Regenerate with AI? This replaces the shared curriculum and its notes for every student in this grade and region."
+        : "Regenerate the unit list with AI? Saved notes for every unit will be replaced."
+    )) return;
     setGenerating(true);
     setError(null);
+    setNotice(null);
     try {
       if (syllabusDirty) setSubject(await subjectApi.update(subjectId, { syllabus_text: syllabus.trim() }));
-      setCurriculum(await curriculumApi.generate(subjectId));
+      const result = await curriculumApi.generate(subjectId, regenerate);
+      setCurriculum(result);
+      if (result.from_library) setNotice("Loaded instantly from the shared library — another student in your grade and region already built this curriculum.");
       setOpenUnitId(null);
       setUnitErrors({});
     } catch (err) {
@@ -123,23 +179,45 @@ export const SubjectPage: React.FC = () => {
     }
   };
 
-  const loadUnitNotes = async (unit: CurriculumUnit) => {
+  const replaceUnit = (updated: CurriculumUnit) =>
+    setCurriculum((c) => c && { ...c, units: c.units.map((u) => (u.id === updated.id ? updated : u)) });
+
+  const loadPractice = async (unit: CurriculumUnit, force = false) => {
+    setPracticeLoadingId(unit.id);
+    setPracticeErrors(({ [unit.id]: _, ...rest }) => rest);
+    try {
+      replaceUnit(await curriculumApi.generateUnitPractice(subjectId, unit.id, force));
+    } catch (err) {
+      setPracticeErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
+    } finally {
+      setPracticeLoadingId(null);
+    }
+  };
+
+  const loadUnitNotes = async (unit: CurriculumUnit, force = false) => {
     setLoadingUnitId(unit.id);
     setUnitErrors(({ [unit.id]: _, ...rest }) => rest);
+    let updated: CurriculumUnit | null = null;
     try {
-      const updated = await curriculumApi.generateUnitDetails(subjectId, unit.id);
-      setCurriculum((c) => c && { ...c, units: c.units.map((u) => (u.id === updated.id ? updated : u)) });
+      updated = await curriculumApi.generateUnitDetails(subjectId, unit.id, force);
+      replaceUnit(updated);
     } catch (err) {
       setUnitErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
     } finally {
       setLoadingUnitId(null);
     }
+    // Practice questions build on the notes, so fetch them once the notes are in
+    if (updated && !updated.practice) loadPractice(updated);
   };
 
   const toggleUnit = (unit: CurriculumUnit) => {
     if (openUnitId === unit.id) { setOpenUnitId(null); return; }
     setOpenUnitId(unit.id);
-    if (!unit.details && loadingUnitId === null) loadUnitNotes(unit);
+    if (!unit.details) {
+      if (loadingUnitId === null) loadUnitNotes(unit);
+    } else if (!unit.practice && practiceLoadingId === null) {
+      loadPractice(unit);
+    }
   };
 
   if (loadError) {
@@ -244,6 +322,11 @@ export const SubjectPage: React.FC = () => {
                   : "AI-inferred from your region's standards — may differ from your school. Add your syllabus for an exact match."}
               </p>
             )}
+            {curriculum.shared && (
+              <p className="text-xs mt-0.5 text-indigo-500 flex items-center gap-1">
+                <Users size={11} /> Shared with students in {[student?.grade, student?.state, student?.country].filter(Boolean).join(" · ")}
+              </p>
+            )}
           </div>
           {hasUnits && (
             <button
@@ -258,6 +341,11 @@ export const SubjectPage: React.FC = () => {
         </div>
 
         {error && <p className="px-5 pt-3 text-sm text-red-600">{error}</p>}
+        {notice && (
+          <p className="mx-5 mt-3 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs text-emerald-700">
+            <Zap size={13} className="flex-shrink-0 mt-0.5" /> {notice}
+          </p>
+        )}
 
         {!hasUnits ? (
           <div className="px-5 py-10 text-center">
@@ -305,7 +393,7 @@ export const SubjectPage: React.FC = () => {
                       {loading ? (
                         <p className="flex items-center gap-2 text-sm text-gray-500 py-3">
                           <Loader2 size={14} className="animate-spin text-indigo-500" />
-                          Writing notes — summary, key concepts and formulas…
+                          Loading notes — summary, key concepts and formulas…
                         </p>
                       ) : unitErrors[unit.id] ? (
                         <div className="text-sm py-2">
@@ -317,9 +405,55 @@ export const SubjectPage: React.FC = () => {
                       ) : unit.details ? (
                         <>
                           <UnitNotes unit={unit} />
+
+                          <section className="mt-5">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                <HelpCircle size={13} className="text-sky-500" /> Practice Questions
+                              </h4>
+                              {unit.practice && (
+                                <button
+                                  onClick={() => {
+                                    if (curriculum.shared && !window.confirm("Generate a new set of questions with AI? This replaces them for every student in this grade and region.")) return;
+                                    loadPractice(unit, true);
+                                  }}
+                                  disabled={practiceLoadingId !== null}
+                                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-sky-700 disabled:opacity-40 transition-colors"
+                                >
+                                  <RefreshCw size={11} /> New questions
+                                </button>
+                              )}
+                            </div>
+                            {practiceLoadingId === unit.id ? (
+                              <p className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                                <Loader2 size={14} className="animate-spin text-sky-500" />
+                                Preparing practice questions with worked solutions…
+                              </p>
+                            ) : practiceErrors[unit.id] ? (
+                              <div className="text-sm py-1">
+                                <p className="text-red-600 mb-1">{practiceErrors[unit.id]}</p>
+                                <button onClick={() => loadPractice(unit)} className="text-xs font-medium text-indigo-600 hover:underline">
+                                  Try again
+                                </button>
+                              </div>
+                            ) : unit.practice ? (
+                              <div className="space-y-2.5">
+                                {unit.practice.map((q, qi) => <PracticeCard key={`${unit.practice_generated_at}-${qi}`} q={q} index={qi} />)}
+                              </div>
+                            ) : (
+                              <button onClick={() => loadPractice(unit)} disabled={practiceLoadingId !== null}
+                                className="text-xs font-medium text-sky-700 hover:underline disabled:opacity-40 py-1">
+                                Load practice questions
+                              </button>
+                            )}
+                          </section>
+
                           <div className="flex justify-end mt-4">
                             <button
-                              onClick={() => loadUnitNotes(unit)}
+                              onClick={() => {
+                                if (curriculum.shared && !window.confirm("Regenerate these notes with AI? This replaces them for every student in this grade and region.")) return;
+                                loadUnitNotes(unit, true);
+                              }}
                               disabled={loadingUnitId !== null}
                               className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-indigo-600 disabled:opacity-40 transition-colors"
                             >
