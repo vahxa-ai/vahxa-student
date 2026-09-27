@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { format } from "date-fns";
 import {
   ArrowLeft, BookOpen, ChevronDown, FileText, Lightbulb, Loader2,
-  MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check, Users, Zap, HelpCircle, ClipboardCheck, Timer, Trophy,
+  MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check, Users, Zap, HelpCircle, ClipboardCheck, Timer, Trophy, Printer,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { subjectApi, curriculumApi, quizApi, sampleTestApi, apiErrorMessage } from "../services/api";
@@ -436,7 +436,13 @@ export const SubjectPage: React.FC = () => {
             )}
           </div>
           {hasUnits && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={`/study-planner/subjects/${subjectId}/print`}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors"
+            >
+              <Printer size={13} /> Print notes
+            </Link>
             <button
               onClick={() => setTestOpen((o) => !o)}
               aria-expanded={testOpen}
@@ -713,7 +719,19 @@ export const SubjectPage: React.FC = () => {
                             {sampleErrors[unit.id] && <p className="text-sm text-red-600 mt-2">{sampleErrors[unit.id]}</p>}
                           </section>
 
-                          <div className="flex justify-end mt-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+                            <div className="flex gap-3">
+                              <Link to={`/study-planner/subjects/${subjectId}/print?unit=${unit.id}`}
+                                className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                                <Printer size={12} /> Print this unit
+                              </Link>
+                              {unit.details.formulas.length > 0 && (
+                                <Link to={`/study-planner/subjects/${subjectId}/print?unit=${unit.id}&mode=formulas`}
+                                  className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                                  <Sigma size={12} /> Formula sheet
+                                </Link>
+                              )}
+                            </div>
                             <button
                               onClick={() => {
                                 if (curriculum.shared && !window.confirm("Regenerate these notes with AI? This replaces them for every student in this grade and region.")) return;
