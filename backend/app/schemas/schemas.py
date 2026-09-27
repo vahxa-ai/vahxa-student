@@ -195,6 +195,8 @@ class CurriculumUnitOut(BaseModel):
     details_generated_at: Optional[datetime]
     practice: Optional[list[PracticeQuestion]] = None
     practice_generated_at: Optional[datetime] = None
+    quiz_size: Optional[int] = None                  # questions in the unit's quiz bank (answers never sent here)
+    quiz_generated_at: Optional[datetime] = None
     from_library: bool = False       # served from the shared library on this request
 
 
@@ -385,3 +387,63 @@ class AdminStudentOut(BaseModel):
 
 class AdminActionRequest(BaseModel):
     note: Optional[str] = Field(default=None, max_length=1000)
+
+
+# --- Quizzes & tests ---
+
+class QuizStartRequest(BaseModel):
+    kind: str = Field(pattern="^(quiz|test)$")
+    unit_id: Optional[int] = None                    # quiz: the unit
+    unit_ids: Optional[list[int]] = None             # test: units to include (None = all units)
+    count: int = Field(default=10, ge=5, le=50)
+    time_limit_minutes: Optional[int] = Field(default=None, ge=1, le=180)
+
+
+class AttemptQuestionOut(BaseModel):
+    index: int
+    question: str
+    options: list[str]
+    difficulty: str
+    unit_title: str
+    # Only present once revealed (quiz: after answering; test: after submitting)
+    your_answer: Optional[int] = None
+    correct_answer: Optional[int] = None
+    correct: Optional[bool] = None
+    explanation: Optional[str] = None
+
+
+class AttemptOut(BaseModel):
+    id: int
+    subject_id: int
+    kind: str
+    unit_ids: list[int]
+    total: int
+    score: Optional[int]
+    time_limit_minutes: Optional[int]
+    started_at: datetime
+    expires_at: Optional[datetime]
+    submitted_at: Optional[datetime]
+    timed_out: bool
+    questions: list[AttemptQuestionOut]
+
+
+class AnswerRequest(BaseModel):
+    index: int = Field(ge=0)
+    choice: int = Field(ge=0, le=3)
+
+
+class SubmitRequest(BaseModel):
+    answers: Optional[list[Optional[int]]] = None    # tests: one entry per question (null = unanswered)
+
+
+class AttemptSummaryOut(BaseModel):
+    id: int
+    kind: str
+    unit_ids: list[int]
+    unit_titles: list[str]
+    score: Optional[int]
+    total: int
+    percent: Optional[int]
+    started_at: datetime
+    submitted_at: Optional[datetime]
+    timed_out: bool

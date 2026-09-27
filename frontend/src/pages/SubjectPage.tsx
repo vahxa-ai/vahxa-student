@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { format } from "date-fns";
 import {
   ArrowLeft, BookOpen, ChevronDown, FileText, Lightbulb, Loader2,
-  MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check, Users, Zap, HelpCircle,
+  MapPin, RefreshCw, Sigma, Sparkles, AlertTriangle, Check, Users, Zap, HelpCircle, ClipboardCheck, Timer, Trophy,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
-import { subjectApi, curriculumApi, apiErrorMessage } from "../services/api";
-import type { Subject, Curriculum, CurriculumUnit, PracticeQuestion } from "../types";
+import { subjectApi, curriculumApi, quizApi, apiErrorMessage } from "../services/api";
+import type { Subject, Curriculum, CurriculumUnit, PracticeQuestion, AttemptSummary } from "../types";
 
 // ─── Practice questions ───────────────────────────────────────────────────────
 
@@ -126,6 +127,70 @@ export const SubjectPage: React.FC = () => {
   const [unitErrors, setUnitErrors] = useState<Record<number, string>>({});
   const [practiceLoadingId, setPracticeLoadingId] = useState<number | null>(null);
   const [practiceErrors, setPracticeErrors] = useState<Record<number, string>>({});
+
+  // quizzes & tests
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [history, setHistory] = useState<AttemptSummary[]>([]);
+  const [testOpen, setTestOpen] = useState(searchParams.get("test") === "1");
+  const [testUnits, setTestUnits] = useState<number[] | null>(null);   // null = all units
+  const [testCount, setTestCount] = useState(20);
+  const [testMinutes, setTestMinutes] = useState<number | null>(null);
+  const [startingTest, setStartingTest] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [quizBusyId, setQuizBusyId] = useState<number | null>(null);
+  const [quizErrors, setQuizErrors] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    quizApi.history(subjectId).then(setHistory).catch(() => setHistory([]));
+  }, [subjectId]);
+
+  const bestByUnit = useMemo(() => {
+    const best: Record<number, number> = {};
+    for (const h of history) {
+      if (h.kind === "quiz" && h.percent !== null) best[h.unit_ids[0]] = Math.max(best[h.unit_ids[0]] ?? 0, h.percent);
+    }
+    return best;
+  }, [history]);
+
+  const startQuiz = async (unit: CurriculumUnit) => {
+    setQuizBusyId(unit.id);
+    setQuizErrors(({ [unit.id]: _, ...rest }) => rest);
+    try {
+      const attempt = await quizApi.startQuiz(subjectId, unit.id);
+      navigate(`/study-planner/subjects/${subjectId}/attempts/${attempt.id}`);
+    } catch (err) {
+      setQuizErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
+      setQuizBusyId(null);
+    }
+  };
+
+  const regenerateQuiz = async (unit: CurriculumUnit) => {
+    if (curriculum?.shared && !window.confirm("Write a new set of quiz questions with AI? This replaces them for every student in this grade and region.")) return;
+    setQuizBusyId(unit.id);
+    setQuizErrors(({ [unit.id]: _, ...rest }) => rest);
+    try {
+      replaceUnit(await quizApi.prepareUnit(subjectId, unit.id, true));
+    } catch (err) {
+      setQuizErrors((e) => ({ ...e, [unit.id]: apiErrorMessage(err) }));
+    } finally {
+      setQuizBusyId(null);
+    }
+  };
+
+  const startTest = async () => {
+    setStartingTest(true);
+    setTestError(null);
+    try {
+      const attempt = await quizApi.startTest(subjectId, {
+        unit_ids: testUnits, count: testCount, time_limit_minutes: testMinutes,
+      });
+      navigate(`/study-planner/subjects/${subjectId}/attempts/${attempt.id}`);
+    } catch (err) {
+      setTestError(apiErrorMessage(err));
+      setStartingTest(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([subjectApi.get(subjectId), curriculumApi.get(subjectId)])
@@ -329,6 +394,14 @@ export const SubjectPage: React.FC = () => {
             )}
           </div>
           {hasUnits && (
+            <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTestOpen((o) => !o)}
+              aria-expanded={testOpen}
+              className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 transition-colors"
+            >
+              <ClipboardCheck size={13} /> Take a test
+            </button>
             <button
               onClick={generate}
               disabled={generating}
@@ -337,8 +410,65 @@ export const SubjectPage: React.FC = () => {
               {generating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
               {generating ? "Regenerating…" : "Regenerate"}
             </button>
+            </div>
           )}
         </div>
+
+        {hasUnits && testOpen && (
+          <div className="mx-4 sm:mx-5 mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5"><ClipboardCheck size={15} className="text-indigo-500" /> Subject test</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Multiple choice across the units you pick. Answers are revealed when you submit.</p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-gray-600">Units</p>
+                <button type="button" className="text-xs text-indigo-600 hover:underline"
+                  onClick={() => setTestUnits(testUnits === null ? [] : null)}>
+                  {testUnits === null ? "Clear all" : "Select all"}
+                </button>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1">
+                {curriculum.units.map((u, i) => {
+                  const checked = testUnits === null || testUnits.includes(u.id);
+                  return (
+                    <label key={u.id} className="flex items-start gap-2 text-sm text-gray-700 rounded-lg bg-white border border-gray-100 px-2.5 py-2 cursor-pointer">
+                      <input type="checkbox" className="mt-0.5" checked={checked} onChange={() => {
+                        const current = testUnits ?? curriculum.units.map((x) => x.id);
+                        const next = checked ? current.filter((id) => id !== u.id) : [...current, u.id];
+                        setTestUnits(next.length === curriculum.units.length ? null : next);
+                      }} />
+                      <span className="min-w-0"><span className="text-gray-400 mr-1">{i + 1}.</span>{u.title}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <label className="text-xs font-semibold text-gray-600">
+                Questions
+                <select className="block mt-1 border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white" value={testCount}
+                  onChange={(e) => setTestCount(Number(e.target.value))}>
+                  {[10, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-gray-600">
+                <span className="inline-flex items-center gap-1"><Timer size={12} /> Time limit</span>
+                <select className="block mt-1 border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white" value={testMinutes ?? ""}
+                  onChange={(e) => setTestMinutes(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">No limit</option>
+                  {[10, 15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+                </select>
+              </label>
+            </div>
+            {testError && <p className="text-sm text-red-600">{testError}</p>}
+            <button onClick={startTest} disabled={startingTest || (testUnits !== null && testUnits.length === 0)}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+              {startingTest ? <><Loader2 size={15} className="animate-spin" /> Preparing questions…</> : "Start test"}
+            </button>
+            {startingTest && <p className="text-xs text-gray-500">Units without a question bank yet are being prepared — this can take up to a minute the first time.</p>}
+          </div>
+        )}
 
         {error && <p className="px-5 pt-3 text-sm text-red-600">{error}</p>}
         {notice && (
@@ -382,7 +512,15 @@ export const SubjectPage: React.FC = () => {
                       {i + 1}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-medium text-gray-800">{unit.title}</span>
+                      <span className="block text-sm font-medium text-gray-800">
+                        {unit.title}
+                        {bestByUnit[unit.id] !== undefined && (
+                          <span className={`ml-2 inline-flex items-center gap-0.5 align-middle text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                            bestByUnit[unit.id] >= 80 ? "bg-emerald-100 text-emerald-700" : bestByUnit[unit.id] >= 50 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
+                            <Trophy size={9} /> {bestByUnit[unit.id]}%
+                          </span>
+                        )}
+                      </span>
                       {unit.overview && <span className="block text-xs text-gray-500 mt-0.5">{unit.overview}</span>}
                     </span>
                     <ChevronDown size={15} className={`text-gray-400 flex-shrink-0 mt-1 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -448,6 +586,32 @@ export const SubjectPage: React.FC = () => {
                             )}
                           </section>
 
+                          <section className="mt-5 rounded-xl border border-violet-100 bg-violet-50/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                                  <ClipboardCheck size={13} className="text-violet-500" /> Unit quiz
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  10 multiple-choice questions with instant feedback
+                                  {bestByUnit[unit.id] !== undefined && <> · best score <b>{bestByUnit[unit.id]}%</b></>}
+                                </p>
+                              </div>
+                              <button onClick={() => startQuiz(unit)} disabled={quizBusyId !== null}
+                                className="inline-flex items-center gap-1.5 bg-violet-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-violet-700 disabled:opacity-50">
+                                {quizBusyId === unit.id ? <><Loader2 size={14} className="animate-spin" /> {unit.quiz_size ? "Starting…" : "Writing questions…"}</>
+                                  : bestByUnit[unit.id] !== undefined ? "Retake quiz" : "Start quiz"}
+                              </button>
+                            </div>
+                            {quizErrors[unit.id] && <p className="text-sm text-red-600 mt-2">{quizErrors[unit.id]}</p>}
+                            {unit.quiz_size && (
+                              <button onClick={() => regenerateQuiz(unit)} disabled={quizBusyId !== null}
+                                className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-violet-700 disabled:opacity-40">
+                                <RefreshCw size={11} /> New quiz questions
+                              </button>
+                            )}
+                          </section>
+
                           <div className="flex justify-end mt-4">
                             <button
                               onClick={() => {
@@ -475,6 +639,36 @@ export const SubjectPage: React.FC = () => {
           </ol>
         )}
       </div>
+
+      {history.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mt-5">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><Trophy size={15} className="text-amber-500" /> Your results</h2>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {history.slice(0, 10).map((h) => (
+              <li key={h.id}>
+                <Link to={`/study-planner/subjects/${subjectId}/attempts/${h.id}`}
+                  className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                  <span className={`w-12 text-center text-sm font-bold rounded-lg py-1 ${
+                    (h.percent ?? 0) >= 80 ? "bg-emerald-100 text-emerald-700" : (h.percent ?? 0) >= 50 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
+                    {h.percent}%
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-gray-800 truncate">
+                      {h.kind === "quiz" ? `Quiz — ${h.unit_titles[0]}` : `Test — ${h.unit_titles.length} unit${h.unit_titles.length > 1 ? "s" : ""}`}
+                    </span>
+                    <span className="block text-xs text-gray-400">
+                      {h.score}/{h.total} · {h.submitted_at ? format(new Date(h.submitted_at + "Z"), "MMM d, h:mm a") : ""}{h.timed_out ? " · over time" : ""}
+                    </span>
+                  </span>
+                  <ChevronDown size={14} className="-rotate-90 text-gray-300" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

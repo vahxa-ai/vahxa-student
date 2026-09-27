@@ -7,6 +7,7 @@ import { ActivitiesPage } from "./pages/ActivitiesPage";
 import { SchedulePage } from "./pages/SchedulePage";
 import { StudyPlannerPage } from "./pages/StudyPlannerPage";
 import { SubjectPage } from "./pages/SubjectPage";
+import { QuizPage } from "./pages/QuizPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ConsentPage } from "./pages/ConsentPage";
 import { ParentPage } from "./pages/ParentPage";
@@ -24,6 +25,7 @@ const App: React.FC = () => (
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/study-planner" element={<StudyPlannerPage />} />
         <Route path="/study-planner/subjects/:subjectId" element={<SubjectPage />} />
+        <Route path="/study-planner/subjects/:subjectId/attempts/:attemptId" element={<QuizPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/parent" element={<ParentPage />} />
         <Route path="/admin" element={<AdminPage />} />

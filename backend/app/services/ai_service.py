@@ -3,6 +3,7 @@ AI plan generation and deadline reminders using Gemma 4 on Google Vertex AI.
 Falls back gracefully if Vertex AI credentials are not configured.
 """
 import json
+import re
 from datetime import date, datetime, time, timedelta
 from typing import Optional
 
@@ -547,3 +548,137 @@ Rules:
     if not questions:
         raise ValueError("model returned no practice questions")
     return questions
+
+
+QUIZ_BANK_SIZE = 15   # requested; verification typically removes a few
+_MIN_QUIZ_QUESTIONS = 6
+
+
+def _notes_block(details: Optional[dict]) -> str:
+    if not details:
+        return ""
+    concepts = "\n".join(f"  - {c['name']}: {c['explanation']}" for c in details.get("key_concepts", []))
+    formulas = "\n".join(f"  - {f['name']}: {f['expression']}" for f in details.get("formulas", []))
+    return f"""Unit notes the student has studied:
+Summary: {details.get("summary", "")}
+Key concepts:
+{concepts or "  (none)"}
+Formulas:
+{formulas or "  (none)"}"""
+
+
+async def generate_unit_quiz(
+    student: Student, subject: Subject, unit: CurriculumUnit, details: Optional[dict]
+) -> list[dict]:
+    """Return a bank of multiple-choice questions:
+    [{"id", "question", "options": [4 strings], "answer": index, "explanation", "difficulty"}]."""
+    if not _vertex_configured():
+        raise AIUnavailableError("Curriculum generation requires Vertex AI (Gemma 4) to be configured.")
+
+    prompt = f"""You are an expert teacher writing a graded multiple-choice quiz for one unit.
+
+{_curriculum_context(student, subject)}
+Curriculum: {subject.curriculum_framework or "not specified"}
+Unit: {unit.title}
+Unit overview: {unit.overview or "—"}
+
+{_notes_block(details)}
+
+Write {QUIZ_BANK_SIZE} multiple-choice questions that test real understanding of this unit — the kind that appear on
+tests. Mix recall, conceptual understanding, calculation/application and interpretation as the subject suits.
+
+Return ONLY a JSON object, no markdown, in exactly this shape:
+{{
+  "questions": [
+    {{
+      "difficulty": "easy | medium | hard",
+      "question": "self-contained question (include any numbers or short passage needed)",
+      "options": ["option A", "option B", "option C", "option D"],
+      "answer": 0,
+      "explanation": "why the correct option is right, and why the most tempting wrong option is wrong"
+    }}
+  ]
+}}
+Rules:
+- Exactly 4 options per question, exactly one correct; "answer" is the 0-based index of the correct option.
+- Wrong options must be plausible — base them on real student mistakes (sign errors, wrong formula, common
+  misconceptions). No "all of the above" / "none of the above". Options must all be different.
+- Do not put the letter (A/B/C/D) inside option text. Vary the position of the correct answer.
+- Options are shuffled for each student, so explanations must refer to options by their content — never by
+  letter, number or position ("option 0", "B", "the second one").
+- Mix difficulties: about 5 easy, 6 medium, 4 hard. Plain text and Unicode math (x², √, π, ≤) — no LaTeX.
+- Work out every answer fully BEFORE writing the question. Each explanation must be a clean, final worked
+  solution — no second-guessing, corrections or "let's re-check" — and every answer must be correct."""
+
+    data = _parse_json(await _call_llm(prompt, max_tokens=6000))
+    bank = []
+    for i, q in enumerate(data.get("questions", [])):
+        if not isinstance(q, dict):
+            continue
+        question = str(q.get("question", "")).strip()
+        options = [str(o).strip() for o in q.get("options", []) if str(o).strip()]
+        answer = q.get("answer")
+        if not question or len(options) != 4 or len(set(o.lower() for o in options)) != 4:
+            continue
+        if not isinstance(answer, int) or isinstance(answer, bool) or not 0 <= answer < 4:
+            continue
+        difficulty = str(q.get("difficulty", "medium")).strip().lower()
+        bank.append({
+            "id": f"q{i}",
+            "question": question,
+            "options": options,
+            "answer": answer,
+            "explanation": _strip_positional(str(q.get("explanation", "")).strip()),
+            "difficulty": difficulty if difficulty in _DIFFICULTIES else "medium",
+        })
+    # Drop questions whose explanation shows the model second-guessing itself
+    bank = [q for q in bank if not _SELF_CORRECTION.search(q["explanation"])]
+    bank = await _verify_quiz(bank)
+    if len(bank) < _MIN_QUIZ_QUESTIONS:
+        raise ValueError(f"only {len(bank)} quiz questions passed verification")
+    return bank
+
+
+# "option 0", "Option B", "choice (c)", "options 1 and 2", "the second option" — meaningless once options are shuffled
+_POSITIONAL = re.compile(
+    r"\b(?:options?|choices?|answers?)\s*\(?(?:[A-Da-d]|[0-3])\)?(?=[\s,.;:)]|$)"
+    r"|\b(?:first|second|third|fourth|last)\s+(?:option|choice)\b",
+    re.IGNORECASE,
+)
+
+
+def _strip_positional(explanation: str) -> str:
+    """Remove sentences that refer to options by position; keep the explanation if nothing would remain."""
+    sentences = re.split(r"(?<=[.!?])\s+", explanation)
+    kept = [s for s in sentences if not _POSITIONAL.search(s)]
+    return " ".join(kept).strip() if kept else explanation
+
+
+_SELF_CORRECTION = re.compile(
+    r"\b(?:wait\b|re-?calculat|re-?check|let'?s (?:check|verify|redo|try again)|actually,|correction\b|hmm+\b|oops\b"
+    r"|mistake in the (?:question|options))",
+    re.IGNORECASE,
+)
+
+
+async def _verify_quiz(bank: list[dict]) -> list[dict]:
+    """Independently re-solve every question (without the marked answers) and keep only those where the
+    solver agrees with the answer key. Catches wrong keys and questions with zero or several right options."""
+    if not bank:
+        return bank
+    listing = "\n\n".join(
+        f"Question {i}:\n{q['question']}\n" + "\n".join(f"  {j}) {o}" for j, o in enumerate(q["options"]))
+        for i, q in enumerate(bank)
+    )
+    prompt = f"""You are a meticulous exam checker. Solve each multiple-choice question below independently and
+carefully (work through any calculation). For each question give the index (0-3) of the single correct option,
+or -1 if no option is correct or more than one option is correct.
+
+{listing}
+
+Return ONLY a JSON object, no markdown: {{"answers": [index for question 0, index for question 1, ...]}}"""
+    data = _parse_json(await _call_llm(prompt, max_tokens=1500))
+    solved = data.get("answers", [])
+    if not isinstance(solved, list) or len(solved) != len(bank):
+        raise ValueError("quiz verification returned an unexpected number of answers")
+    return [q for q, s in zip(bank, solved) if isinstance(s, int) and not isinstance(s, bool) and s == q["answer"]]

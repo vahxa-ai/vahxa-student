@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.db.database import init_db
 from app.api.routes import (
-    student, activities, schedule, subjects, deadlines, curriculum, auth, onboarding, consent, admin,
+    student, activities, schedule, subjects, deadlines, curriculum, auth, onboarding, consent, admin, quizzes,
 )
 
 
@@ -54,6 +54,7 @@ app.include_router(subjects.router, prefix="/api")
 app.include_router(schedule.router, prefix="/api")
 app.include_router(deadlines.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")
+app.include_router(quizzes.router, prefix="/api")
 
 
 @app.get("/api/health")

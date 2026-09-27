@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.api.deps import get_approved_student
 from app.db.database import get_db
-from app.models.models import Subject, Student
+from app.models.models import Subject, Student, QuizAttempt
 from app.schemas.schemas import SubjectCreate, SubjectUpdate, SubjectOut
 
 router = APIRouter(prefix="/subjects", tags=["subjects"])
@@ -58,4 +58,7 @@ async def update_subject(
 @router.delete("/{subject_id}", status_code=204)
 async def delete_subject(subject_id: int, student: Student = Depends(get_approved_student),
                          db: AsyncSession = Depends(get_db)):
-    await db.delete(await own_subject(subject_id, student, db))
+    subject = await own_subject(subject_id, student, db)
+    # Quiz history goes with the subject (explicit so it also holds where the DB doesn't enforce FK cascades)
+    await db.execute(delete(QuizAttempt).where(QuizAttempt.subject_id == subject.id))
+    await db.delete(subject)

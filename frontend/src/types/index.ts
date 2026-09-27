@@ -91,6 +91,8 @@ export interface CurriculumUnit {
   details_generated_at: string | null;
   practice: PracticeQuestion[] | null;
   practice_generated_at: string | null;
+  quiz_size: number | null;          // questions in the unit's quiz bank
+  quiz_generated_at: string | null;
   from_library: boolean;
 }
 
@@ -195,4 +197,49 @@ export interface AdminStudent {
   parent_name: string | null;
   parent_email: string | null;
   consent: AdminConsent | null;
+}
+
+// --- Quizzes & tests ---
+
+export type AttemptKind = "quiz" | "test";
+
+export interface AttemptQuestion {
+  index: number;
+  question: string;
+  options: string[];
+  difficulty: PracticeDifficulty;
+  unit_title: string;
+  // present once revealed (quiz: after answering; test: after submitting)
+  your_answer: number | null;
+  correct_answer: number | null;
+  correct: boolean | null;
+  explanation: string | null;
+}
+
+export interface Attempt {
+  id: number;
+  subject_id: number;
+  kind: AttemptKind;
+  unit_ids: number[];
+  total: number;
+  score: number | null;
+  time_limit_minutes: number | null;
+  started_at: string;
+  expires_at: string | null;
+  submitted_at: string | null;
+  timed_out: boolean;
+  questions: AttemptQuestion[];
+}
+
+export interface AttemptSummary {
+  id: number;
+  kind: AttemptKind;
+  unit_ids: number[];
+  unit_titles: string[];
+  score: number | null;
+  total: number;
+  percent: number | null;
+  started_at: string;
+  submitted_at: string | null;
+  timed_out: boolean;
 }

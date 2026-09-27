@@ -172,7 +172,7 @@ async def publish(key: str, cat: dict, display: dict, framework: Optional[str], 
             "framework": framework,
             "units": [
                 {"title": u["title"], "overview": u.get("overview"), "details": None, "details_generated_at": None,
-                 "practice": None, "practice_generated_at": None}
+                 "practice": None, "practice_generated_at": None, "quiz": None, "quiz_generated_at": None}
                 for u in units
             ],
             "model": settings.vertex_model,
@@ -199,3 +199,7 @@ async def publish_unit_details(key: str, position: int, title: str, details: dic
 
 async def publish_unit_practice(key: str, position: int, title: str, practice: list[dict]) -> None:
     await _publish_unit_fields(key, position, title, "practice", practice)
+
+
+async def publish_unit_quiz(key: str, position: int, title: str, quiz: list[dict]) -> None:
+    await _publish_unit_fields(key, position, title, "quiz", quiz)

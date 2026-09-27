@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from typing import Optional
@@ -33,6 +34,8 @@ def _unit_out(unit: CurriculumUnit, from_library: bool = False) -> CurriculumUni
         details_generated_at=unit.details_generated_at,
         practice=[PracticeQuestion(**q) for q in json.loads(unit.practice_json)] if unit.practice_json else None,
         practice_generated_at=unit.practice_generated_at,
+        quiz_size=len(json.loads(unit.quiz_json)) if unit.quiz_json else None,   # never expose the answers here
+        quiz_generated_at=unit.quiz_generated_at,
         from_library=from_library,
     )
 
@@ -56,16 +59,74 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _ai_http_error(e: Exception) -> HTTPException:
+    if isinstance(e, ai_service.AIUnavailableError):
+        return HTTPException(status_code=503, detail=str(e))
+    if isinstance(e, (ValueError, KeyError, TypeError)):
+        return HTTPException(status_code=502, detail="The AI returned an unexpected format. Please try again.")
+    if isinstance(e, (RuntimeError, OSError)):
+        return HTTPException(status_code=502, detail=f"AI request failed: {e}")
+    raise e
+
+
 async def _run_ai(coro):
     """Map AI failures to clean HTTP errors instead of an unhandled 500."""
     try:
         return await coro
-    except ai_service.AIUnavailableError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except (ValueError, KeyError, TypeError):
-        raise HTTPException(status_code=502, detail="The AI returned an unexpected format. Please try again.")
-    except (RuntimeError, OSError) as e:
-        raise HTTPException(status_code=502, detail=f"AI request failed: {e}")
+    except (ai_service.AIUnavailableError, ValueError, KeyError, TypeError, RuntimeError, OSError) as e:
+        raise _ai_http_error(e)
+
+
+_QUIZ_GENERATION_CONCURRENCY = 4
+
+
+async def ensure_quiz_banks(
+    student: Student, subject: Subject, units: list[CurriculumUnit], db: AsyncSession, force: bool = False
+) -> None:
+    """Make sure each unit has a multiple-choice bank: local copy → shared library → Gemma (in parallel).
+    force=True regenerates with Gemma and replaces the shared copy."""
+    missing = [u for u in units if force or not u.quiz_json]
+    if not missing:
+        return
+
+    key = subject.curriculum_library_key
+    if key and not force:
+        entry = await curriculum_library.lookup(key)
+        shared_units = entry["units"] if entry else []
+        still_missing = []
+        for unit in missing:
+            shared = shared_units[unit.position] if unit.position < len(shared_units) else None
+            if shared and shared.get("title") == unit.title and shared.get("quiz"):
+                unit.quiz_json = json.dumps(shared["quiz"])
+                unit.quiz_generated_at = _parse_iso(shared.get("quiz_generated_at")) or datetime.utcnow()
+            else:
+                still_missing.append(unit)
+        missing = still_missing
+
+    if missing:
+        gate = asyncio.Semaphore(_QUIZ_GENERATION_CONCURRENCY)
+
+        async def generate(unit: CurriculumUnit):
+            details = json.loads(unit.details_json) if unit.details_json else None
+            async with gate:
+                return await ai_service.generate_unit_quiz(student, subject, unit, details)
+
+        results = await asyncio.gather(*(generate(u) for u in missing), return_exceptions=True)
+        failures = [r for r in results if isinstance(r, Exception)]
+        now = datetime.utcnow()
+        for unit, bank in zip(missing, results):
+            if isinstance(bank, Exception):
+                continue
+            unit.quiz_json = json.dumps(bank)
+            unit.quiz_generated_at = now
+            if key:
+                await curriculum_library.publish_unit_quiz(key, unit.position, unit.title, bank)
+        if failures:
+            # The error response rolls the request's transaction back — commit first so the banks that
+            # did succeed aren't lost (a retry then only regenerates the failed ones).
+            await db.commit()
+            raise _ai_http_error(failures[0])
+    await db.flush()
 
 
 async def _replace_units(subject: Subject, units: list[dict], db: AsyncSession) -> None:
@@ -81,6 +142,8 @@ async def _replace_units(subject: Subject, units: list[dict], db: AsyncSession) 
             details_generated_at=_parse_iso(u.get("details_generated_at")) if details else None,
             practice_json=json.dumps(practice) if practice else None,
             practice_generated_at=_parse_iso(u.get("practice_generated_at")) if practice else None,
+            quiz_json=json.dumps(u["quiz"]) if u.get("quiz") else None,
+            quiz_generated_at=_parse_iso(u.get("quiz_generated_at")) if u.get("quiz") else None,
         ))
 
 
@@ -201,4 +264,16 @@ async def generate_unit_practice(
 
     if key:
         await curriculum_library.publish_unit_practice(key, unit.position, unit.title, practice)
+    return _unit_out(unit)
+
+
+@router.post("/units/{unit_id}/quiz", response_model=CurriculumUnitOut)
+async def prepare_unit_quiz(
+    subject_id: int, unit_id: int, force: bool = False,
+    student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)
+):
+    """Build (or with force=true, regenerate and replace the shared copy of) a unit's quiz question bank."""
+    subject = await own_subject(subject_id, student, db)
+    unit = await _get_unit(subject_id, unit_id, db)
+    await ensure_quiz_banks(student, subject, [unit], db, force=force)
     return _unit_out(unit)

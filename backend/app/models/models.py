@@ -192,6 +192,8 @@ class CurriculumUnit(Base):
     details_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     practice_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # [{question, answer, explanation, difficulty}]
     practice_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    quiz_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # MCQ bank: [{id, question, options, answer, explanation, difficulty}]
+    quiz_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     subject: Mapped["Subject"] = relationship("Subject", back_populates="units")
 
@@ -210,3 +212,24 @@ class Deadline(Base):
     created_at:  Mapped[datetime]      = mapped_column(DateTime, default=datetime.utcnow)
 
     subject: Mapped[Optional["Subject"]] = relationship("Subject", back_populates="deadlines")
+
+
+class QuizAttempt(Base):
+    """One quiz (single unit, instant feedback) or test (several units, graded on submit) taken by a student.
+    The served questions — including correct answers — are snapshotted here and never sent to the browser
+    before they're revealed."""
+    __tablename__ = "quiz_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), nullable=False, index=True)
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)          # "quiz" | "test"
+    unit_ids_json: Mapped[str] = mapped_column(Text, nullable=False)       # [unit ids]
+    questions_json: Mapped[str] = mapped_column(Text, nullable=False)      # [{question, options, answer, explanation, difficulty, unit_id, unit_title}]
+    answers_json: Mapped[str] = mapped_column(Text, nullable=False)        # [choice index | null]
+    score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total: Mapped[int] = mapped_column(Integer, nullable=False)
+    time_limit_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    timed_out: Mapped[bool] = mapped_column(Boolean, default=False)

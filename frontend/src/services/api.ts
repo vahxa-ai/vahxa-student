@@ -12,6 +12,9 @@ import type {
   ParentChild,
   AdminStudent,
   StudentStatus,
+  Attempt,
+  AttemptQuestion,
+  AttemptSummary,
 } from "../types";
 
 // Same-origin "/api" (the dev server proxies it to the backend), so the session cookie always applies.
@@ -124,6 +127,26 @@ export const curriculumApi = {
     api
       .post<CurriculumUnit>(`/subjects/${subjectId}/curriculum/units/${unitId}/practice`, null, { params: { force } })
       .then((r) => r.data),
+};
+
+// --- Quizzes & tests ---
+export const quizApi = {
+  /** Build (or with force, regenerate for everyone in the category) a unit's question bank. */
+  prepareUnit: (subjectId: number, unitId: number, force = false) =>
+    api
+      .post<CurriculumUnit>(`/subjects/${subjectId}/curriculum/units/${unitId}/quiz`, null, { params: { force } })
+      .then((r) => r.data),
+  startQuiz: (subjectId: number, unitId: number) =>
+    api.post<Attempt>(`/subjects/${subjectId}/attempts`, { kind: "quiz", unit_id: unitId }).then((r) => r.data),
+  startTest: (subjectId: number, opts: { unit_ids: number[] | null; count: number; time_limit_minutes: number | null }) =>
+    api.post<Attempt>(`/subjects/${subjectId}/attempts`, { kind: "test", ...opts }).then((r) => r.data),
+  get: (attemptId: number) => api.get<Attempt>(`/attempts/${attemptId}`).then((r) => r.data),
+  answer: (attemptId: number, index: number, choice: number) =>
+    api.post<AttemptQuestion>(`/attempts/${attemptId}/answer`, { index, choice }).then((r) => r.data),
+  submit: (attemptId: number, answers?: (number | null)[]) =>
+    api.post<Attempt>(`/attempts/${attemptId}/submit`, answers ? { answers } : {}).then((r) => r.data),
+  history: (subjectId: number) =>
+    api.get<AttemptSummary[]>(`/subjects/${subjectId}/attempts`).then((r) => r.data),
 };
 
 /** Human-readable message from an API error (server `detail` when present). */
