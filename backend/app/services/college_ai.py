@@ -86,6 +86,61 @@ Return ONLY a JSON object, no code fences:
             "intro": _s(data.get("intro"), 1000), "chapters": chapters}
 
 
+FLOW_TRACKS = {"academics": "Academics", "testing": "Testing", "activities": "Activities",
+               "applications": "Applications", "finances": "Financial aid"}
+
+
+async def generate_admissions_flow(country: str, chapter_titles: list[str]) -> dict:
+    """A visual map of the admissions journey: phases (columns) × fixed tracks (lanes) with short steps.
+    {"phases": [{"id", "label"}], "tracks": [{"id", "label"}],
+     "steps": [{"id", "phase", "track", "title", "detail", "chapter"}]}  — chapter is a 1-based chapter number or null."""
+    _require_ai()
+    chapters = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(chapter_titles))
+    prompt = f"""You are an experienced college admissions counselor. Create a clear, step-by-step visual map of the
+university admissions journey for high-school students in {country}, from the first year of high school (grade 9
+or the local equivalent) to enrolling in university.
+
+Use 6–8 phases in time order, named the way students in {country} would recognize (e.g. "Grade 9", "Grade 10",
+"Grade 11 — Fall", "Grade 11 — Spring", "Summer before Grade 12", "Grade 12 — Fall", "Grade 12 — Spring").
+Use EXACTLY these lanes (keys): {", ".join(FLOW_TRACKS)}.
+In each phase, add the most important steps for the lanes where something happens (not every lane needs a step in
+every phase). Around 25–35 steps in total.
+Each step: a short "title" (at most 6 words, starting with a verb where possible), a one-sentence "detail"
+(at most 25 words), and "chapter": the number of the guide chapter that explains it (or null).
+
+Guide chapters:
+{chapters}
+
+Be accurate for {country}; don't give exact dates or college-specific statistics.
+
+Return ONLY a JSON object, no code fences:
+{{"phases": [{{"label": "Grade 9"}}],
+  "steps": [{{"phase": 0, "track": "academics", "title": "…", "detail": "…", "chapter": 1}}]}}
+where "phase" is the 0-based index into "phases"."""
+    data = _parse_json(await _call_llm(prompt, max_tokens=6000))
+    phases = [{"id": f"p{i + 1}", "label": _s(p.get("label"), 60)} for i, p in enumerate(data.get("phases") or [])
+              if isinstance(p, dict) and _s(p.get("label"))]
+    if not 3 <= len(phases) <= 10:
+        raise ValueError("admissions map has an unexpected number of phases")
+    steps, seen = [], set()
+    for s in data.get("steps") or []:
+        if not isinstance(s, dict):
+            continue
+        phase, track, title = s.get("phase"), _s(s.get("track"), 20).lower(), _s(s.get("title"), 80)
+        if not isinstance(phase, int) or isinstance(phase, bool) or not 0 <= phase < len(phases):
+            continue
+        if track not in FLOW_TRACKS or not title or (phase, title.lower()) in seen:
+            continue
+        seen.add((phase, title.lower()))
+        chapter = s.get("chapter")
+        valid_chapter = isinstance(chapter, int) and not isinstance(chapter, bool) and 1 <= chapter <= len(chapter_titles)
+        steps.append({"id": f"f{len(steps) + 1}", "phase": phases[phase]["id"], "track": track, "title": title,
+                      "detail": _s(s.get("detail"), 300), "chapter": chapter if valid_chapter else None})
+    if len(steps) < 10:
+        raise ValueError("admissions map has too few steps")
+    return {"phases": phases, "tracks": [{"id": k, "label": v} for k, v in FLOW_TRACKS.items()], "steps": steps}
+
+
 # ─── Personalized roadmap ─────────────────────────────────────────────────────
 
 async def generate_roadmap(student: Student, profile: Optional[CollegeProfile], colleges: list[str],

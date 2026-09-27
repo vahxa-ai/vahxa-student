@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { FindCollegesTab } from "../components/college/FindCollegesTab";
+import { JourneyMap } from "../components/college/JourneyMap";
 import { collegeApi, apiErrorMessage, type AchievementInput } from "../services/api";
 import type {
   Achievement, AchievementCategory, AdmissionsGuide, CollegeCategory, CollegeEntry, CollegeProfile, Roadmap,
@@ -209,12 +210,23 @@ const GuideTab: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [view, setView] = useState<"map" | "chapters">("map");
+  const [mapBusy, setMapBusy] = useState(false);
 
   useEffect(() => { collegeApi.getGuide().then(setGuide).catch((err) => { setGuide(null); setError(apiErrorMessage(err)); }); }, []);
 
   const create = async () => {
     setBusy(true); setError(null);
     try { setGuide(await collegeApi.createGuide()); } catch (err) { setError(apiErrorMessage(err)); } finally { setBusy(false); }
+  };
+  const buildMap = async () => {
+    setMapBusy(true); setError(null);
+    try { setGuide(await collegeApi.createGuideMap()); } catch (err) { setError(apiErrorMessage(err)); } finally { setMapBusy(false); }
+  };
+  const openChapter = (chapterId: string) => {
+    setView("chapters");
+    setOpenId(chapterId);
+    setTimeout(() => document.getElementById(`chapter-${chapterId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
   if (guide === undefined) return <Busy text="Loading…" />;
@@ -237,11 +249,35 @@ const GuideTab: React.FC = () => {
         <p className="text-xs text-gray-400 mt-2 flex items-start gap-1"><Info size={12} className="mt-0.5 flex-shrink-0" />
           General guidance for {guide.country}. Rules and dates change — always confirm with official sources and your school counsellor.</p>
       </div>
-      <div className="space-y-2">
+
+      <div className="flex gap-1.5 mb-4 print:hidden" role="tablist" aria-label="Guide view">
+        {([["map", "Journey map", MapIcon], ["chapters", "Chapters", BookOpen]] as const).map(([key, label, Icon]) => (
+          <button key={key} role="tab" aria-selected={view === key} onClick={() => setView(key)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border ${
+              view === key ? "bg-indigo-600 text-white border-transparent" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"}`}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "map" && (guide.flow ? (
+        <JourneyMap flow={guide.flow} chapters={guide.chapters} grade={student?.grade} onOpenChapter={openChapter} />
+      ) : (
+        <div className={`${card} p-6 text-center`}>
+          <MapIcon size={28} className="mx-auto text-indigo-300 mb-2" />
+          <p className="text-sm text-gray-600 mb-3">See the whole admissions journey at a glance — every step from Grade 9 to enrollment.</p>
+          {mapBusy ? <Busy text="Drawing the journey map — about 30 seconds…" /> : (
+            <button onClick={buildMap} className="bg-indigo-600 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-indigo-700">Show the journey map</button>
+          )}
+          <Err msg={error} />
+        </div>
+      ))}
+
+      {view === "chapters" && <div className="space-y-2">
         {guide.chapters.map((c, i) => {
           const open = openId === c.id;
           return (
-            <div key={c.id} className={card}>
+            <div key={c.id} id={`chapter-${c.id}`} className={`${card} scroll-mt-20`}>
               <button onClick={() => setOpenId(open ? null : c.id)} aria-expanded={open}
                 className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50 rounded-2xl">
                 <span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
@@ -265,7 +301,7 @@ const GuideTab: React.FC = () => {
             </div>
           );
         })}
-      </div>
+      </div>}
     </>
   );
 };

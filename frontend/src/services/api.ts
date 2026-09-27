@@ -181,6 +181,7 @@ export const collegeApi = {
   saveProfile: (data: Partial<CollegeProfile>) => api.put<CollegeProfile>("/college/profile", data).then((r) => r.data),
   getGuide: () => api.get<AdmissionsGuide | null>("/college/guide").then((r) => r.data),
   createGuide: () => api.post<AdmissionsGuide>("/college/guide").then((r) => r.data),
+  createGuideMap: () => api.post<AdmissionsGuide>("/college/guide/flow").then((r) => r.data),
   getRoadmap: () => api.get<Roadmap | null>("/college/roadmap").then((r) => r.data),
   generateRoadmap: () => api.post<Roadmap>("/college/roadmap").then((r) => r.data),
   setMilestone: (id: string, completed: boolean) =>

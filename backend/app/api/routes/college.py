@@ -1,6 +1,7 @@
 """College prep: college goals, a shared admissions guide per country, a personalized roadmap with a checklist,
 a college list with AI summaries, and an activities & achievements log."""
 import json
+import logging
 import re
 from datetime import datetime
 from typing import Optional
@@ -19,12 +20,13 @@ from app.models.models import (
 from app.schemas.schemas import (
     CollegeProfileIn, CollegeProfileOut, AdmissionsGuideOut, GuideChapter, RoadmapOut, RoadmapStage,
     RoadmapMilestone, MilestoneUpdate, CollegeEntryIn, CollegeEntryUpdate, CollegeEntryOut, CollegeSummary,
-    AchievementIn, AchievementOut, CollegePreferences, RecommendationsOut,
+    AchievementIn, AchievementOut, CollegePreferences, RecommendationsOut, AdmissionsFlow,
 )
 from app.services import college_ai, ai_service
 from app.services.curriculum_library import _norm_country
 
 router = APIRouter(prefix="/college", tags=["college"])
+log = logging.getLogger(__name__)
 
 MAX_COLLEGES = 40
 MAX_ACHIEVEMENTS = 100
@@ -132,7 +134,9 @@ async def generate_recommendations(student: Student = Depends(get_approved_stude
 def _guide_out(g: AdmissionsGuide, country: str) -> AdmissionsGuideOut:
     content = json.loads(g.content_json)
     return AdmissionsGuideOut(country=country, title=content["title"], intro=content.get("intro", ""),
-                              chapters=[GuideChapter(**c) for c in content["chapters"]], generated_at=g.generated_at)
+                              chapters=[GuideChapter(**c) for c in content["chapters"]],
+                              flow=AdmissionsFlow(**content["flow"]) if content.get("flow") else None,
+                              generated_at=g.generated_at)
 
 
 @router.get("/guide", response_model=Optional[AdmissionsGuideOut])
@@ -142,8 +146,17 @@ async def get_guide(student: Student = Depends(get_approved_student), db: AsyncS
     return _guide_out(g, display) if g else None
 
 
+async def _add_flow(content: dict, display: str) -> None:
+    """Attach the visual journey map; the guide is still usable (and the map retryable) if this fails."""
+    try:
+        content["flow"] = await college_ai.generate_admissions_flow(display, [c["title"] for c in content["chapters"]])
+    except (ai_service.AIUnavailableError, ValueError, KeyError, TypeError, RuntimeError, OSError) as e:
+        log.warning("Admissions map generation failed for %s: %s", display, e)
+
+
 async def _write_guide(key: str, display: str, db: AsyncSession) -> AdmissionsGuide:
     content = await _run_ai(college_ai.generate_admissions_guide(display))
+    await _add_flow(content, display)
     g = (await db.execute(select(AdmissionsGuide).where(AdmissionsGuide.country_key == key))).scalar_one_or_none()
     if g:
         g.content_json, g.generated_at = json.dumps(content), datetime.utcnow()
@@ -160,6 +173,22 @@ async def generate_guide(student: Student = Depends(get_approved_student), db: A
     key, display = _country(student)
     g = (await db.execute(select(AdmissionsGuide).where(AdmissionsGuide.country_key == key))).scalar_one_or_none()
     return _guide_out(g or await _write_guide(key, display, db), display)
+
+
+@router.post("/guide/flow", response_model=AdmissionsGuideOut)
+async def generate_guide_flow(student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)):
+    """Build the visual journey map for an existing guide that doesn't have one yet (shared by the country)."""
+    key, display = _country(student)
+    g = (await db.execute(select(AdmissionsGuide).where(AdmissionsGuide.country_key == key))).scalar_one_or_none()
+    if not g:
+        raise HTTPException(status_code=409, detail="Open the guide first.")
+    content = json.loads(g.content_json)
+    if not content.get("flow"):
+        content["flow"] = await _run_ai(
+            college_ai.generate_admissions_flow(display, [c["title"] for c in content["chapters"]]))
+        g.content_json = json.dumps(content)
+        await db.flush()
+    return _guide_out(g, display)
 
 
 @router.get("/admin/guides", response_model=list[AdmissionsGuideOut])

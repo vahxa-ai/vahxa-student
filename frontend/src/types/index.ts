@@ -356,11 +356,20 @@ export interface GuideChapter {
   key_takeaways: string[];
 }
 
+export type FlowTrackId = "academics" | "testing" | "activities" | "applications" | "finances";
+
+export interface AdmissionsFlow {
+  phases: { id: string; label: string }[];
+  tracks: { id: FlowTrackId; label: string }[];
+  steps: { id: string; phase: string; track: FlowTrackId; title: string; detail: string; chapter: number | null }[];
+}
+
 export interface AdmissionsGuide {
   country: string;
   title: string;
   intro: string;
   chapters: GuideChapter[];
+  flow: AdmissionsFlow | null;     // visual journey map
   generated_at: string;
 }
 

@@ -584,11 +584,37 @@ class GuideChapter(BaseModel):
     key_takeaways: list[str]
 
 
+class FlowPhase(BaseModel):
+    id: str
+    label: str
+
+
+class FlowTrack(BaseModel):
+    id: str
+    label: str
+
+
+class FlowStep(BaseModel):
+    id: str
+    phase: str
+    track: str
+    title: str
+    detail: str = ""
+    chapter: Optional[int] = None       # 1-based chapter number in the guide
+
+
+class AdmissionsFlow(BaseModel):
+    phases: list[FlowPhase]
+    tracks: list[FlowTrack]
+    steps: list[FlowStep]
+
+
 class AdmissionsGuideOut(BaseModel):
     country: str
     title: str
     intro: str
     chapters: list[GuideChapter]
+    flow: Optional[AdmissionsFlow] = None   # visual journey map
     generated_at: datetime
 
 
