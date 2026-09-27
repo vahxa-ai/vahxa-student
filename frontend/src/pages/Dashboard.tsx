@@ -1,58 +1,33 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, ListChecks, CalendarDays, Sparkles,
-  Plus, ArrowRight, Check, Zap, TrendingUp,
+  BookOpen, ListChecks, Sparkles,
+  ArrowRight, Zap, TrendingUp,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
-import { memberApi, activityApi, familyApi } from "../services/api";
+import { activityApi, subjectApi } from "../services/api";
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { activeFamilyId, setActiveFamilyId, families, setFamilies, setMembers, members } = useAppStore();
+  const { student } = useAppStore();
   const [activityCount, setActivityCount] = useState(0);
-  const [showCreateCard, setShowCreateCard] = useState(false);
-  const [newFamilyName, setNewFamilyName] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [subjectCount, setSubjectCount] = useState(0);
 
   useEffect(() => {
-    if (!activeFamilyId) return;
-    memberApi.list(activeFamilyId).then(setMembers);
-  }, [activeFamilyId]);
-
-  useEffect(() => {
-    if (!members.length) { setActivityCount(0); return; }
-    Promise.all(members.map((m) => activityApi.list(m.id))).then((all) =>
-      setActivityCount(all.flat().length)
-    );
-  }, [members]);
-
-  const createFamily = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFamilyName.trim()) return;
-    setCreating(true);
-    try {
-      const fam = await familyApi.create({ name: newFamilyName.trim() });
-      setFamilies([...families, fam]);
-      setActiveFamilyId(fam.id);
-      setMembers([]);
-      setNewFamilyName("");
-      setShowCreateCard(false);
-    } finally {
-      setCreating(false);
-    }
-  };
+    activityApi.list().then((a) => setActivityCount(a.length));
+    subjectApi.list().then((s) => setSubjectCount(s.length));
+  }, []);
 
   const stats = [
     {
-      label: "Family Members",
-      value: members.length,
-      icon: Users,
+      label: "Subjects",
+      value: subjectCount,
+      icon: BookOpen,
       gradient: "from-violet-400 to-indigo-500",
       bg: "from-violet-50 to-indigo-50",
       border: "border-violet-100",
       text: "text-violet-600",
-      to: "/family",
+      to: "/study-planner",
     },
     {
       label: "Activities",
@@ -74,59 +49,7 @@ export const Dashboard: React.FC = () => {
       text: "text-purple-600",
       to: "/schedule",
     },
-    {
-      label: "Calendar Sync",
-      value: "Connect",
-      icon: CalendarDays,
-      gradient: "from-sky-400 to-indigo-500",
-      bg: "from-sky-50 to-indigo-50",
-      border: "border-sky-100",
-      text: "text-sky-600",
-      to: "/calendar",
-    },
   ];
-
-  const activeFamily = families.find((f) => f.id === activeFamilyId);
-
-  /* ── Onboarding ────────────────────────────────────────────── */
-  if (!families.length) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-4xl shadow-2xl shadow-indigo-200 mx-auto mb-5">
-              🏠
-            </div>
-            <h1 className="text-3xl font-bold text-gray-800">
-              Welcome to{" "}
-              <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">
-                Family AI
-              </span>
-            </h1>
-            <p className="text-gray-500 mt-2 text-sm">Create your first family profile to get started</p>
-          </div>
-          <div className="bg-white rounded-3xl shadow-xl shadow-indigo-100 border border-indigo-50 p-7">
-            <form onSubmit={createFamily}>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Family Name</label>
-              <input
-                required autoFocus
-                className="w-full border border-indigo-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-indigo-50/50 mb-5 placeholder-gray-400"
-                placeholder='e.g., "The Johnson Family"'
-                value={newFamilyName}
-                onChange={(e) => setNewFamilyName(e.target.value)}
-              />
-              <button
-                type="submit" disabled={creating}
-                className="w-full bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-2xl py-3 font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity shadow-lg shadow-indigo-200"
-              >
-                {creating ? "Creating..." : "Create Family →"}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   /* ── Main Dashboard ────────────────────────────────────────── */
   return (
@@ -136,68 +59,13 @@ export const Dashboard: React.FC = () => {
       <div className="flex items-start justify-between mb-8">
         <div>
           <p className="text-xs font-semibold text-indigo-500 uppercase tracking-widest mb-1">Good day 👋</p>
-          <h1 className="text-3xl font-bold text-gray-800">{activeFamily?.name}</h1>
-          <p className="text-gray-400 text-sm mt-1">Here's your family overview for today</p>
+          <h1 className="text-3xl font-bold text-gray-800">{student?.name}</h1>
+          <p className="text-gray-400 text-sm mt-1">Here's your overview for today</p>
         </div>
-        <button
-          onClick={() => setShowCreateCard(!showCreateCard)}
-          className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-2xl px-4 py-2 hover:bg-indigo-50 hover:shadow-sm transition-all shadow-sm"
-        >
-          <Plus size={14} /> New Family
-        </button>
       </div>
 
-      {/* Inline create form */}
-      {showCreateCard && (
-        <div className="bg-white rounded-3xl border border-indigo-100 shadow-lg shadow-indigo-50 p-5 mb-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Create a New Family</h3>
-          <form onSubmit={createFamily} className="flex gap-3">
-            <input
-              required autoFocus
-              className="flex-1 border border-indigo-200 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-indigo-50/50"
-              placeholder='e.g., "The Smith Family"'
-              value={newFamilyName}
-              onChange={(e) => setNewFamilyName(e.target.value)}
-            />
-            <button
-              type="submit" disabled={creating}
-              className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-2xl px-5 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              {creating ? "Creating..." : "Create"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowCreateCard(false); setNewFamilyName(""); }}
-              className="border border-gray-200 text-gray-500 rounded-2xl px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Family switcher */}
-      {families.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          {families.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => { setActiveFamilyId(f.id); setMembers([]); }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-semibold border transition-all ${
-                f.id === activeFamilyId
-                  ? "bg-gradient-to-r from-indigo-500 to-violet-500 text-white border-transparent shadow-md shadow-indigo-200"
-                  : "bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
-              }`}
-            >
-              🏠 {f.name}
-              {f.id === activeFamilyId && <Check size={13} />}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {stats.map(({ label, value, icon: Icon, gradient, bg, border, text, to }) => (
           <button
             key={label}
@@ -218,11 +86,10 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         {[
           { title: "View Activities",  desc: "See all scheduled tasks and events",       icon: ListChecks,  color: "text-indigo-500",  bg: "bg-indigo-50",  to: "/activities"    },
           { title: "Academic Tracker",  desc: "Track subjects, deadlines & reminders",    icon: TrendingUp,  color: "text-violet-500",  bg: "bg-violet-50",  to: "/study-planner" },
-          { title: "Sync Calendar",    desc: "Connect with Google Calendar",             icon: CalendarDays,color: "text-sky-500",     bg: "bg-sky-50",     to: "/calendar"      },
         ].map(({ title, desc, icon: Icon, color, bg, to }) => (
           <button
             key={title}
@@ -255,12 +122,12 @@ export const Dashboard: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-bold">Generate Today's Schedule</h2>
-              <p className="text-white/70 text-xs">Powered by Llama 3.3 via Groq (free)</p>
+              <p className="text-white/70 text-xs">Powered by Gemma 4 on Google Vertex AI</p>
             </div>
           </div>
           <p className="text-white/80 text-sm mt-3 mb-5 max-w-lg leading-relaxed">
-            Let AI create a personalized schedule for your family based on their activities,
-            school timings, and daily routines — in seconds.
+            Let AI create a personalized schedule based on your activities, subjects,
+            school timings, and daily routine — in seconds.
           </p>
           <div className="flex flex-wrap gap-3">
             <button

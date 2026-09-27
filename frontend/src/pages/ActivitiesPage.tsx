@@ -5,13 +5,12 @@ import {
   Sunset, Moon,
 } from "lucide-react";
 import { useAppStore } from "../store/appStore";
-import { activityApi, memberApi } from "../services/api";
-import type { Activity, ActivityType, FamilyMember, RecurrenceType } from "../types";
+import { activityApi, studentApi } from "../services/api";
+import type { Activity, ActivityType, RecurrenceType } from "../types";
 
 const TYPE_COLORS: Record<ActivityType, string> = {
   school:  "bg-blue-100 text-blue-700",
   sports:  "bg-indigo-100 text-indigo-700",
-  family:  "bg-pink-100 text-pink-700",
   medical: "bg-red-100 text-red-700",
   hobby:   "bg-yellow-100 text-yellow-700",
   other:   "bg-gray-100 text-gray-600",
@@ -31,58 +30,48 @@ interface TimeSection {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-const defaultSections = (role: string): TimeSection[] => {
-  const isStudent = role === "student";
-  return [
-    {
-      key: "morning",
-      label: "Morning",
-      startTime: "06:00",
-      endTime: "08:30",
-      activities: [
-        { id: uid(), text: "Wake up & freshen up" },
-        { id: uid(), text: "Breakfast" },
-        { id: uid(), text: isStudent ? "Pack school bag" : "Prepare for work" },
-      ],
-    },
-    {
-      key: "school",
-      label: isStudent ? "School Time" : "Office / Work",
-      startTime: "08:30",
-      endTime: isStudent ? "15:30" : "17:30",
-      activities: isStudent
-        ? [{ id: uid(), text: "Attend classes" }, { id: uid(), text: "Lunch break (12:30 PM)" }]
-        : [{ id: uid(), text: "Work / office hours" }, { id: uid(), text: "Lunch break (1:00 PM)" }],
-    },
-    {
-      key: "afterschool",
-      label: isStudent ? "After School" : "After Work",
-      startTime: isStudent ? "15:30" : "17:30",
-      endTime: "18:00",
-      activities: isStudent
-        ? [
-            { id: uid(), text: "Snack & rest" },
-            { id: uid(), text: "Homework (45 min blocks)" },
-            { id: uid(), text: "Sports / outdoor play" },
-          ]
-        : [
-            { id: uid(), text: "Commute home" },
-            { id: uid(), text: "Exercise / walk" },
-          ],
-    },
-    {
-      key: "evening",
-      label: "Evening",
-      startTime: "18:00",
-      endTime: isStudent ? "21:30" : "22:00",
-      activities: [
-        { id: uid(), text: "Family dinner" },
-        { id: uid(), text: "Wind-down / reading" },
-        { id: uid(), text: isStudent ? "Bedtime by 9:30 PM" : "Bedtime by 10:30 PM" },
-      ],
-    },
-  ];
-};
+const defaultSections = (): TimeSection[] => [
+  {
+    key: "morning",
+    label: "Morning",
+    startTime: "06:00",
+    endTime: "08:30",
+    activities: [
+      { id: uid(), text: "Wake up & freshen up" },
+      { id: uid(), text: "Breakfast" },
+      { id: uid(), text: "Pack school bag" },
+    ],
+  },
+  {
+    key: "school",
+    label: "School Time",
+    startTime: "08:30",
+    endTime: "15:30",
+    activities: [{ id: uid(), text: "Attend classes" }, { id: uid(), text: "Lunch break (12:30 PM)" }],
+  },
+  {
+    key: "afterschool",
+    label: "After School",
+    startTime: "15:30",
+    endTime: "18:00",
+    activities: [
+      { id: uid(), text: "Snack & rest" },
+      { id: uid(), text: "Homework (45 min blocks)" },
+      { id: uid(), text: "Sports / outdoor play" },
+    ],
+  },
+  {
+    key: "evening",
+    label: "Evening",
+    startTime: "18:00",
+    endTime: "21:30",
+    activities: [
+      { id: uid(), text: "Dinner" },
+      { id: uid(), text: "Wind-down / reading" },
+      { id: uid(), text: "Bedtime by 9:30 PM" },
+    ],
+  },
+];
 
 // Format "HH:MM" → "H:MM AM/PM"
 const fmt12 = (t: string) => {
@@ -147,96 +136,48 @@ const SECTION_STYLE: Record<string, { Icon: React.ElementType; bg: string; borde
 };
 const fallbackStyle = { Icon: Clock, bg: "bg-gray-50", border: "border-gray-200", headerBg: "bg-gray-100", accent: "text-gray-600" };
 
-// ─── Member Defaults Panel ─────────────────────────────────────────────────────
+// ─── Daily Routine Panel ──────────────────────────────────────────────────────
 
-const MemberDefaultsPanel: React.FC<{
-  members: FamilyMember[];
-  activeFamilyId: number;
-  onSaved: (updated: FamilyMember) => void;
-}> = ({ members, activeFamilyId, onSaved }) => {
+const DailyRoutinePanel: React.FC = () => {
+  const { student, setStudent } = useAppStore();
   const [open, setOpen] = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [memberSections, setMemberSections] = useState<Record<number, TimeSection[]>>({});
-  const [saving, setSaving] = useState<number | null>(null);
-  const [saved, setSaved] = useState<number | null>(null);
+  const [sections, setSections] = useState<TimeSection[]>(
+    () => (student?.default_prompt && promptToSections(student.default_prompt)) || defaultSections()
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const newActivityRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const getSections = (member: FamilyMember): TimeSection[] => {
-    if (memberSections[member.id]) return memberSections[member.id];
-    if (member.default_prompt) {
-      const parsed = promptToSections(member.default_prompt);
-      if (parsed) return parsed;
-    }
-    return defaultSections(member.role);
-  };
+  const mapSection = (sectionKey: string, fn: (s: TimeSection) => TimeSection) =>
+    setSections((prev) => prev.map((s) => (s.key === sectionKey ? fn(s) : s)));
 
-  const expandMember = (member: FamilyMember) => {
-    const id = member.id;
-    if (expandedId === id) { setExpandedId(null); return; }
-    if (!memberSections[id]) {
-      setMemberSections((prev) => ({ ...prev, [id]: getSections(member) }));
-    }
-    setExpandedId(id);
-  };
+  const updateSection = (sectionKey: string, patch: Partial<TimeSection>) =>
+    mapSection(sectionKey, (s) => ({ ...s, ...patch }));
 
-  const updateSection = (memberId: number, sectionKey: string, patch: Partial<TimeSection>) => {
-    setMemberSections((prev) => ({
-      ...prev,
-      [memberId]: (prev[memberId] ?? []).map((s) =>
-        s.key === sectionKey ? { ...s, ...patch } : s
-      ),
-    }));
-  };
-
-  const addActivity = (memberId: number, sectionKey: string) => {
+  const addActivity = (sectionKey: string) => {
     const newAct: TimeActivity = { id: uid(), text: "" };
-    setMemberSections((prev) => ({
-      ...prev,
-      [memberId]: (prev[memberId] ?? []).map((s) =>
-        s.key === sectionKey ? { ...s, activities: [...s.activities, newAct] } : s
-      ),
-    }));
+    mapSection(sectionKey, (s) => ({ ...s, activities: [...s.activities, newAct] }));
     setTimeout(() => newActivityRefs.current[newAct.id]?.focus(), 50);
   };
 
-  const updateActivity = (memberId: number, sectionKey: string, actId: string, text: string) => {
-    setMemberSections((prev) => ({
-      ...prev,
-      [memberId]: (prev[memberId] ?? []).map((s) =>
-        s.key === sectionKey
-          ? { ...s, activities: s.activities.map((a) => a.id === actId ? { ...a, text } : a) }
-          : s
-      ),
+  const updateActivity = (sectionKey: string, actId: string, text: string) =>
+    mapSection(sectionKey, (s) => ({
+      ...s,
+      activities: s.activities.map((a) => (a.id === actId ? { ...a, text } : a)),
     }));
-  };
 
-  const removeActivity = (memberId: number, sectionKey: string, actId: string) => {
-    setMemberSections((prev) => ({
-      ...prev,
-      [memberId]: (prev[memberId] ?? []).map((s) =>
-        s.key === sectionKey
-          ? { ...s, activities: s.activities.filter((a) => a.id !== actId) }
-          : s
-      ),
-    }));
-  };
+  const removeActivity = (sectionKey: string, actId: string) =>
+    mapSection(sectionKey, (s) => ({ ...s, activities: s.activities.filter((a) => a.id !== actId) }));
 
-  const handleSave = async (member: FamilyMember) => {
-    const sections = memberSections[member.id] ?? getSections(member);
-    const prompt = sectionsToPrompt(sections);
-    setSaving(member.id);
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const updated = await memberApi.update(activeFamilyId, member.id, { default_prompt: prompt });
-      onSaved(updated);
-      setSaved(member.id);
-      setTimeout(() => setSaved(null), 2000);
+      setStudent(await studentApi.update({ default_prompt: sectionsToPrompt(sections) }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } finally {
-      setSaving(null);
+      setSaving(false);
     }
-  };
-
-  const handleReset = (member: FamilyMember) => {
-    setMemberSections((prev) => ({ ...prev, [member.id]: defaultSections(member.role) }));
   };
 
   return (
@@ -248,148 +189,113 @@ const MemberDefaultsPanel: React.FC<{
       >
         <span className="flex items-center gap-2">
           <Clock size={15} className="text-indigo-500" />
-          Daily Schedule Templates
+          My Daily Routine
           <span className="text-xs font-normal text-gray-400 ml-1">
-            — set timeframes &amp; activities per member used when generating plans
+            — timeframes &amp; activities used when generating plans
           </span>
+          {student?.default_prompt && (
+            <span className="text-xs text-indigo-500 font-medium">• saved</span>
+          )}
         </span>
         <ChevronDown size={15} className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="border-t border-gray-100 px-5 py-4 space-y-3">
-          {members.map((member) => {
-            const isExpanded = expandedId === member.id;
-            const sections = memberSections[member.id] ?? [];
+        <div className="border-t border-gray-100 p-5">
+          <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                  {sections.map((section) => {
+                    const style = SECTION_STYLE[section.key] ?? fallbackStyle;
+                    const { Icon } = style;
+                    return (
+                      <div
+                        key={section.key}
+                        className={`rounded-xl border ${style.border} ${style.bg} overflow-hidden`}
+                      >
+                        {/* Section header */}
+                        <div className={`${style.headerBg} px-3 py-2.5 flex items-center gap-2`}>
+                          <Icon size={14} className={style.accent} />
+                          <span className={`text-xs font-semibold ${style.accent} flex-1`}>
+                            {section.label}
+                          </span>
+                          {/* Time range inputs */}
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="time"
+                              value={section.startTime}
+                              onChange={(e) =>
+                                updateSection(section.key, { startTime: e.target.value })
+                              }
+                              className="text-xs border-0 bg-white/70 rounded px-1 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-300 w-20"
+                            />
+                            <span className="text-xs text-gray-400">–</span>
+                            <input
+                              type="time"
+                              value={section.endTime}
+                              onChange={(e) =>
+                                updateSection(section.key, { endTime: e.target.value })
+                              }
+                              className="text-xs border-0 bg-white/70 rounded px-1 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-300 w-20"
+                            />
+                          </div>
+                        </div>
 
-            return (
-              <div key={member.id} className="border border-gray-200 rounded-xl overflow-hidden">
-                {/* Member row */}
-                <button
-                  type="button"
-                  onClick={() => expandMember(member)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-7 h-7 rounded-full text-white text-xs flex items-center justify-center font-bold flex-shrink-0"
-                      style={{ backgroundColor: member.color }}
-                    >
-                      {member.avatar_initials[0]}
-                    </div>
-                    <span className="text-sm font-medium text-gray-800">{member.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 capitalize">
-                      {member.role}
-                    </span>
-                    {member.default_prompt && (
-                      <span className="text-xs text-indigo-500 font-medium">• saved</span>
-                    )}
-                  </div>
-                  <ChevronDown size={13} className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                </button>
-
-                {/* Sections editor */}
-                {isExpanded && (
-                  <div className="p-4">
-                    <div className="grid sm:grid-cols-2 gap-3 mb-4">
-                      {sections.map((section) => {
-                        const style = SECTION_STYLE[section.key] ?? fallbackStyle;
-                        const { Icon } = style;
-                        return (
-                          <div
-                            key={section.key}
-                            className={`rounded-xl border ${style.border} ${style.bg} overflow-hidden`}
-                          >
-                            {/* Section header */}
-                            <div className={`${style.headerBg} px-3 py-2.5 flex items-center gap-2`}>
-                              <Icon size={14} className={style.accent} />
-                              <span className={`text-xs font-semibold ${style.accent} flex-1`}>
-                                {section.label}
-                              </span>
-                              {/* Time range inputs */}
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="time"
-                                  value={section.startTime}
-                                  onChange={(e) =>
-                                    updateSection(member.id, section.key, { startTime: e.target.value })
-                                  }
-                                  className="text-xs border-0 bg-white/70 rounded px-1 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-300 w-20"
-                                />
-                                <span className="text-xs text-gray-400">–</span>
-                                <input
-                                  type="time"
-                                  value={section.endTime}
-                                  onChange={(e) =>
-                                    updateSection(member.id, section.key, { endTime: e.target.value })
-                                  }
-                                  className="text-xs border-0 bg-white/70 rounded px-1 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-300 w-20"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Activities list */}
-                            <div className="px-3 py-2 space-y-1.5">
-                              {section.activities.map((act) => (
-                                <div key={act.id} className="flex items-center gap-1.5 group">
-                                  <span className={`w-1 h-1 rounded-full flex-shrink-0 ${style.accent.replace("text-", "bg-")}`} />
-                                  <input
-                                    ref={(el) => { newActivityRefs.current[act.id] = el; }}
-                                    value={act.text}
-                                    onChange={(e) => updateActivity(member.id, section.key, act.id, e.target.value)}
-                                    placeholder="Activity..."
-                                    className="flex-1 text-xs text-gray-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-400 focus:outline-none py-0.5 min-w-0 placeholder-gray-300"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => removeActivity(member.id, section.key, act.id)}
-                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all flex-shrink-0"
-                                  >
-                                    <X size={11} />
-                                  </button>
-                                </div>
-                              ))}
+                        {/* Activities list */}
+                        <div className="px-3 py-2 space-y-1.5">
+                          {section.activities.map((act) => (
+                            <div key={act.id} className="flex items-center gap-1.5 group">
+                              <span className={`w-1 h-1 rounded-full flex-shrink-0 ${style.accent.replace("text-", "bg-")}`} />
+                              <input
+                                ref={(el) => { newActivityRefs.current[act.id] = el; }}
+                                value={act.text}
+                                onChange={(e) => updateActivity(section.key, act.id, e.target.value)}
+                                placeholder="Activity..."
+                                className="flex-1 text-xs text-gray-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-400 focus:outline-none py-0.5 min-w-0 placeholder-gray-300"
+                              />
                               <button
                                 type="button"
-                                onClick={() => addActivity(member.id, section.key)}
-                                className={`flex items-center gap-1 text-xs ${style.accent} opacity-60 hover:opacity-100 transition-opacity mt-1`}
+                                onClick={() => removeActivity(section.key, act.id)}
+                                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all flex-shrink-0"
                               >
-                                <Plus size={11} /> Add activity
+                                <X size={11} />
                               </button>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addActivity(section.key)}
+                            className={`flex items-center gap-1 text-xs ${style.accent} opacity-60 hover:opacity-100 transition-opacity mt-1`}
+                          >
+                            <Plus size={11} /> Add activity
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+          </div>
 
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => handleReset(member)}
-                        className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
-                      >
-                        Reset to defaults
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSave(member)}
-                        disabled={saving === member.id}
-                        className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-lg px-4 py-2 text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                      >
-                        {saving === member.id ? (
-                          <><Loader2 size={12} className="animate-spin" /> Saving…</>
-                        ) : saved === member.id ? (
-                          <><Check size={12} /> Saved!</>
-                        ) : (
-                          "Save Schedule"
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setSections(defaultSections())}
+              className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-lg px-4 py-2 text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? (
+                <><Loader2 size={12} className="animate-spin" /> Saving…</>
+              ) : saved ? (
+                <><Check size={12} /> Saved!</>
+              ) : (
+                "Save Routine"
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -399,12 +305,11 @@ const MemberDefaultsPanel: React.FC<{
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const ActivitiesPage: React.FC = () => {
-  const { members, activeFamilyId, setMembers } = useAppStore();
-  const [activities, setActivities] = useState<(Activity & { member?: FamilyMember })[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<(Activity & { member?: FamilyMember }) | null>(null);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [form, setForm] = useState({
-    member_id: "", title: "", activity_type: "school" as ActivityType,
+    title: "", activity_type: "school" as ActivityType,
     description: "", location: "", start_date: "", end_date: "",
     start_time: "", duration_minutes: "60",
     recurrence: "none" as RecurrenceType, recurrence_days: "",
@@ -412,27 +317,24 @@ export const ActivitiesPage: React.FC = () => {
   });
 
   const loadActivities = async () => {
-    if (!members.length) return;
-    const all = await Promise.all(
-      members.map((m) => activityApi.list(m.id).then((acts) => acts.map((a) => ({ ...a, member: m }))))
-    );
-    setActivities(all.flat().sort((a, b) => (a.start_date ?? "").localeCompare(b.start_date ?? "")));
+    const acts = await activityApi.list();
+    setActivities(acts.sort((a, b) => (a.start_date ?? "").localeCompare(b.start_date ?? "")));
   };
 
-  useEffect(() => { loadActivities(); }, [members]); // eslint-disable-line
+  useEffect(() => { loadActivities(); }, []); // eslint-disable-line
 
   const BLANK = () => ({
-    member_id: "", title: "", activity_type: "school" as ActivityType,
+    title: "", activity_type: "school" as ActivityType,
     description: "", location: "", start_date: "", end_date: "",
     start_time: "", duration_minutes: "60",
     recurrence: "none" as RecurrenceType, recurrence_days: "", is_special: false,
   });
 
   const openAdd = () => { setEditingActivity(null); setForm(BLANK()); setShowForm(true); };
-  const openEdit = (act: Activity & { member?: FamilyMember }) => {
+  const openEdit = (act: Activity) => {
     setEditingActivity(act);
     setForm({
-      member_id: String(act.member_id), title: act.title,
+      title: act.title,
       activity_type: act.activity_type, description: act.description ?? "",
       location: act.location ?? "", start_date: act.start_date ?? "",
       end_date: act.end_date ?? "", start_time: act.start_time ?? "",
@@ -455,18 +357,18 @@ export const ActivitiesPage: React.FC = () => {
       is_special: form.is_special,
     };
     if (editingActivity) {
-      const updated = await activityApi.update(editingActivity.member_id, editingActivity.id, payload);
-      setActivities((prev) => prev.map((a) => a.id === editingActivity.id ? { ...updated, member: editingActivity.member } : a));
+      const updated = await activityApi.update(editingActivity.id, payload);
+      setActivities((prev) => prev.map((a) => a.id === editingActivity.id ? updated : a));
     } else {
-      await activityApi.create(parseInt(form.member_id), payload);
+      await activityApi.create(payload);
       await loadActivities();
     }
     closeForm();
   };
 
-  const handleDelete = async (act: Activity & { member?: FamilyMember }) => {
+  const handleDelete = async (act: Activity) => {
     if (!window.confirm(`Delete "${act.title}"?`)) return;
-    await activityApi.delete(act.member_id, act.id);
+    await activityApi.delete(act.id);
     setActivities((prev) => prev.filter((a) => a.id !== act.id));
   };
 
@@ -478,7 +380,7 @@ export const ActivitiesPage: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Activities</h1>
-          <p className="text-gray-500 text-sm mt-1">School, sports, and family events for all members</p>
+          <p className="text-gray-500 text-sm mt-1">Your classes, sports, appointments and other commitments</p>
         </div>
         <button
           onClick={openAdd}
@@ -499,13 +401,6 @@ export const ActivitiesPage: React.FC = () => {
               <button onClick={closeForm} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Member *</label>
-                <select required disabled={!!editingActivity} className={fieldCls + " disabled:bg-gray-50 disabled:text-gray-500"} value={form.member_id} onChange={(e) => setField("member_id", e.target.value)}>
-                  <option value="">Select member...</option>
-                  {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
@@ -514,7 +409,7 @@ export const ActivitiesPage: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                   <select className={fieldCls} value={form.activity_type} onChange={(e) => setField("activity_type", e.target.value)}>
-                    {["school","sports","family","medical","hobby","other"].map((t) => (
+                    {["school","sports","medical","hobby","other"].map((t) => (
                       <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                     ))}
                   </select>
@@ -579,19 +474,13 @@ export const ActivitiesPage: React.FC = () => {
       )}
 
       {/* Daily Schedule Templates */}
-      {members.length > 0 && activeFamilyId && (
-        <MemberDefaultsPanel
-          members={members}
-          activeFamilyId={activeFamilyId}
-          onSaved={(updated) => setMembers(members.map((m) => (m.id === updated.id ? updated : m)))}
-        />
-      )}
+      <DailyRoutinePanel />
 
       {/* Activity cards */}
       {activities.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-lg mb-2">No activities yet</p>
-          <p className="text-sm">Add school schedules, sports, and family events</p>
+          <p className="text-sm">Add school schedules, sports, and other commitments</p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -614,14 +503,6 @@ export const ActivitiesPage: React.FC = () => {
                   <button onClick={() => handleDelete(act)} className="p-1 text-gray-300 hover:text-red-400 transition-colors"><X size={16} /></button>
                 </div>
               </div>
-              {act.member && (
-                <div className="flex items-center gap-1.5 mb-2">
-                  <div className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-medium" style={{ backgroundColor: act.member.color }}>
-                    {act.member.avatar_initials[0]}
-                  </div>
-                  <span className="text-sm text-gray-600">{act.member.name}</span>
-                </div>
-              )}
               <div className="space-y-1 text-sm text-gray-500">
                 {act.start_date && (
                   <div className="flex items-center gap-1.5">
@@ -648,9 +529,6 @@ export const ActivitiesPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              {act.synced_to_calendar && (
-                <span className="mt-2 inline-flex items-center gap-1 text-xs text-indigo-600">✓ Synced to Google Calendar</span>
-              )}
             </div>
           ))}
         </div>

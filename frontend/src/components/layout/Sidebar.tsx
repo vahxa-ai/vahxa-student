@@ -1,69 +1,23 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { NavLink } from "react-router-dom";
 import {
-  CalendarDays, Users, ListChecks, Sparkles, Home,
-  Settings, ChevronDown, Plus, Check,
-  GraduationCap, ShoppingCart, Zap, UtensilsCrossed,
+  UserRound, ListChecks, Sparkles, Home,
+  Settings, GraduationCap, Zap,
 } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
-import { familyApi } from "../../services/api";
 
 const navItems = [
   { to: "/",              icon: Home,         label: "Dashboard"     },
-  { to: "/family",        icon: Users,        label: "Family"        },
   { to: "/activities",    icon: ListChecks,   label: "Activities"    },
   { to: "/study-planner", icon: GraduationCap,label: "Academic Tracker" },
   { to: "/schedule",      icon: Sparkles,     label: "AI Schedule"   },
-  { to: "/meal-planner",  icon: UtensilsCrossed, label: "Meal Planner" },
-  { to: "/shopping",      icon: ShoppingCart, label: "Shopping List" },
-  { to: "/calendar",      icon: CalendarDays, label: "Calendar"      },
+  { to: "/profile",       icon: UserRound,    label: "My Profile"    },
   { to: "/settings",      icon: Settings,     label: "Settings"      },
 ];
 
 export const Sidebar: React.FC = () => {
-  const { activeFamilyId, setActiveFamilyId, families, setFamilies, setMembers } = useAppStore();
-  const [open, setOpen]           = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName]     = useState("");
-  const [creating, setCreating]   = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const activeFamily = families.find((f) => f.id === activeFamilyId);
-
-  useEffect(() => {
-    familyApi.list().then((data) => {
-      setFamilies(data);
-      if (!activeFamilyId && data.length > 0) setActiveFamilyId(data[0].id);
-    });
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false); setShowCreate(false); setNewName("");
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const switchFamily = (id: number) => {
-    setActiveFamilyId(id); setMembers([]);
-    setOpen(false); setShowCreate(false); setNewName("");
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    setCreating(true);
-    try {
-      const fam = await familyApi.create({ name: newName.trim() });
-      setFamilies([...families, fam]);
-      switchFamily(fam.id);
-    } finally {
-      setCreating(false); setNewName("");
-    }
-  };
+  const { student } = useAppStore();
+  const subtitle = [student?.grade, student?.school].filter(Boolean).join(" · ") || "Student";
 
   return (
     <aside className="w-64 bg-white border-r border-gray-100 flex flex-col min-h-screen shadow-sm">
@@ -77,94 +31,29 @@ export const Sidebar: React.FC = () => {
         <div className="absolute -bottom-4 -left-4 w-16 h-16 rounded-full bg-white/10" />
         <div className="relative flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-xl shadow">
-            🏠
+            🎓
           </div>
           <div>
-            <p className="font-bold text-white text-sm tracking-wide">Vahxa-Family</p>
-            <p className="text-white/60 text-xs">Smart Family Planner</p>
+            <p className="font-bold text-white text-sm tracking-wide">Vahxa-Student</p>
+            <p className="text-white/60 text-xs">Smart Student Planner</p>
           </div>
         </div>
       </div>
 
-      {/* ── Family switcher ─────────────────────────────────── */}
-      <div className="px-3 py-3 border-b border-gray-100 relative" ref={dropdownRef}>
-        <button
-          onClick={() => { setOpen(!open); setShowCreate(false); }}
+      {/* ── Student card ─────────────────────────────────────── */}
+      <div className="px-3 py-3 border-b border-gray-100">
+        <NavLink
+          to="/profile"
           className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition-colors"
         >
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {activeFamily ? activeFamily.name.charAt(0).toUpperCase() : "?"}
+            {student ? student.name.charAt(0).toUpperCase() : "?"}
           </div>
           <div className="flex-1 text-left min-w-0">
-            <p className="text-xs font-semibold text-gray-700 truncate leading-tight">
-              {activeFamily ? activeFamily.name : "Select a family"}
-            </p>
-            <p className="text-[10px] text-gray-400 leading-tight">Active workspace</p>
+            <p className="text-xs font-semibold text-gray-700 truncate leading-tight">{student?.name}</p>
+            <p className="text-[10px] text-gray-400 leading-tight truncate">{subtitle}</p>
           </div>
-          <ChevronDown
-            size={13}
-            className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          />
-        </button>
-
-        {open && (
-          <div className="absolute top-full left-3 right-3 mt-1.5 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
-            {families.length > 0 && (
-              <div className="py-1.5">
-                <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Your Families
-                </p>
-                {families.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => switchFamily(f.id)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-indigo-50 text-left transition-colors"
-                  >
-                    <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {f.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="flex-1 text-sm text-gray-700 truncate font-medium">{f.name}</span>
-                    {f.id === activeFamilyId && <Check size={13} className="text-indigo-500 flex-shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-            {families.length > 0 && <div className="border-t border-gray-100" />}
-            {!showCreate ? (
-              <button
-                onClick={() => setShowCreate(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-indigo-50 text-indigo-600 text-sm font-medium transition-colors"
-              >
-                <Plus size={15} /> Create New Family
-              </button>
-            ) : (
-              <form onSubmit={handleCreate} className="p-3">
-                <input
-                  autoFocus required
-                  className="w-full border border-indigo-200 rounded-xl px-2.5 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-2 bg-indigo-50/50"
-                  placeholder='e.g., "The Johnsons"'
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="submit" disabled={creating}
-                    className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl py-1.5 text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
-                  >
-                    {creating ? "Creating..." : "Create"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowCreate(false); setNewName(""); }}
-                    className="flex-1 border border-gray-200 text-gray-500 rounded-xl py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
+        </NavLink>
       </div>
 
       {/* ── Navigation ──────────────────────────────────────── */}
@@ -207,8 +96,8 @@ export const Sidebar: React.FC = () => {
             <Zap size={11} className="text-white" />
           </div>
           <div>
-            <p className="text-[10px] font-semibold text-gray-600 leading-tight">Powered by Groq</p>
-            <p className="text-[9px] text-gray-400 leading-tight">Llama 3.3 · Free tier</p>
+            <p className="text-[10px] font-semibold text-gray-600 leading-tight">Powered by Gemma 4</p>
+            <p className="text-[9px] text-gray-400 leading-tight">Google Vertex AI</p>
           </div>
         </div>
       </div>

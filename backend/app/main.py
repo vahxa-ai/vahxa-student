@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.db.database import init_db
-from app.api.routes import family, activities, schedule, calendar, subjects, study_plan, health, deadlines, pantry, meal_plan
+from app.api.routes import student, activities, schedule, subjects, deadlines
 
 
 @asynccontextmanager
@@ -27,16 +27,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(family.router, prefix="/api")
+app.include_router(student.router, prefix="/api")
 app.include_router(activities.router, prefix="/api")
 app.include_router(subjects.router, prefix="/api")
 app.include_router(schedule.router, prefix="/api")
-app.include_router(study_plan.router, prefix="/api")
-app.include_router(calendar.router, prefix="/api")
-app.include_router(health.router, prefix="/api")
 app.include_router(deadlines.router, prefix="/api")
-app.include_router(pantry.router, prefix="/api")
-app.include_router(meal_plan.router, prefix="/api")
 
 
 @app.get("/api/health")

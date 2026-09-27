@@ -1,6 +1,6 @@
-# 🏠 Family AI Assistant
+# 🎓 Student AI Assistant
 
-An AI-powered family scheduling and planning app — daily schedules, student study plans, Google Calendar sync, and weekly reports, all driven by a **free** LLM (Llama 3.3-70b via Groq).
+An AI-powered personal planner for a single student — activities, subjects, deadlines, AI-generated daily/weekly schedules and deadline reminders, all driven by Google's open **Gemma 4** model on Vertex AI.
 
 ---
 
@@ -10,8 +10,8 @@ An AI-powered family scheduling and planning app — daily schedules, student st
 graph TB
     subgraph Client["🖥️ Frontend (React 18 + TypeScript)"]
         direction TB
-        UI["Pages\nDashboard · Family · Activities\nSchedule · Study Plan · Reports · Calendar"]
-        Store["Zustand Store\n(active family, members)"]
+        UI["Pages\nDashboard · Activities · Academic Tracker\nAI Schedule · Profile · Settings"]
+        Store["Zustand Store\n(student profile)"]
         AxiosClient["Axios API Client\n/services/api.ts"]
         UI <--> Store
         UI --> AxiosClient
@@ -22,17 +22,15 @@ graph TB
         API["REST API\nfastapi · uvicorn"]
 
         subgraph Routes["API Routes"]
-            R1["/families  /members"]
+            R1["/student"]
             R2["/activities"]
             R3["/subjects"]
-            R4["/schedules  /reports"]
-            R5["/study-plans"]
-            R6["/calendar"]
+            R4["/deadlines"]
+            R5["/schedule"]
         end
 
         subgraph Services["Services"]
-            AI["ai_service.py\nPrompt builder\nSchedule · Report\nStudy Plan"]
-            CAL["calendar_service.py\nOAuth flow\nEvent sync"]
+            AI["ai_service.py\nPlan prompt builder\nDeadline reminders"]
         end
 
         ORM["SQLAlchemy ORM (async)"]
@@ -42,18 +40,16 @@ graph TB
     end
 
     subgraph Data["🗄️ Data Layer"]
-        DB[("SQLite\nfamily_aid.db\n─────────────\nfamilies\nfamily_members\nactivities\nsubjects\ngenerated_schedules\nstudy_plans\ngoogle_calendar_tokens")]
+        DB[("SQLite\nstudent_aid.db\n─────────────\nstudent\nactivities\nsubjects\ndeadlines")]
     end
 
     subgraph External["☁️ External Services"]
-        GROQ["Groq API (Free)\nLlama 3.3-70b\nconsole.groq.com"]
-        GCAL["Google Calendar API\nOAuth 2.0"]
+        VERTEX["Google Vertex AI\nGemma 4 26B (serverless)\nOpenAI-compatible API"]
     end
 
     AxiosClient -->|"HTTP/JSON"| API
     ORM -->|"aiosqlite"| DB
-    AI -->|"Chat completion"| GROQ
-    CAL -->|"REST"| GCAL
+    AI -->|"Chat completion"| VERTEX
 
     style Client fill:#EEF2FF,stroke:#6366F1,color:#1e1b4b
     style Server fill:#F0FDF4,stroke:#22C55E,color:#14532d
@@ -65,26 +61,21 @@ graph TB
 
 ## Data Model
 
+Each app instance belongs to one student, so records carry no owner ID.
+
 ```mermaid
 erDiagram
-    FAMILY {
+    STUDENT {
         int id PK
         string name
-        string timezone
-    }
-    FAMILY_MEMBER {
-        int id PK
-        int family_id FK
-        string name
-        enum role
         int age
         string school
         string grade
-        string color
+        string timezone
+        text default_prompt
     }
     ACTIVITY {
         int id PK
-        int member_id FK
         string title
         enum activity_type
         date start_date
@@ -96,7 +87,6 @@ erDiagram
     }
     SUBJECT {
         int id PK
-        int member_id FK
         string name
         enum difficulty
         enum homework_frequency
@@ -104,38 +94,16 @@ erDiagram
         string class_days
         date exam_date
     }
-    GENERATED_SCHEDULE {
+    DEADLINE {
         int id PK
-        int family_id FK
-        int member_id FK
-        date schedule_date
-        date schedule_end_date
-        time start_time
-        time end_time
-        string location
-        text content
-        text custom_prompt
-    }
-    STUDY_PLAN {
-        int id PK
-        int member_id FK
-        date week_start
-        text content
-    }
-    GOOGLE_CALENDAR_TOKEN {
-        int id PK
-        int family_id FK
-        text access_token
-        text refresh_token
-        string calendar_id
+        int subject_id FK
+        string title
+        enum deadline_type
+        date due_date
+        bool completed
     }
 
-    FAMILY ||--o{ FAMILY_MEMBER : "has"
-    FAMILY_MEMBER ||--o{ ACTIVITY : "has"
-    FAMILY_MEMBER ||--o{ SUBJECT : "enrolled in"
-    FAMILY_MEMBER ||--o{ GENERATED_SCHEDULE : "has"
-    FAMILY_MEMBER ||--o{ STUDY_PLAN : "has"
-    FAMILY ||--o{ GOOGLE_CALENDAR_TOKEN : "connected to"
+    SUBJECT ||--o{ DEADLINE : "has"
 ```
 
 ---
@@ -144,13 +112,11 @@ erDiagram
 
 | Feature | Description |
 |---------|-------------|
-| 👨‍👩‍👧 **Family Management** | Multiple families, color-coded members (parent / student / guardian) |
-| 📋 **Activity Tracking** | School, sports, family events with recurrence; one-time **special events** highlighted |
-| 🤖 **AI Schedule Generator** | Llama 3.3-70b creates hour-by-hour daily/multi-day schedules with conflict detection |
-| 📚 **Student Study Plan** | Per-student weekly study timetable (tabular) aware of subjects, sports, exams, and relax time |
-| 📊 **Reports** | AI-generated daily and weekly schedule reports — printable / PDF-ready |
-| 📅 **Google Calendar Sync** | OAuth 2.0 — push activities to Google Calendar, view upcoming events |
-| 🔧 **Custom Prompt** | Paste your daily routine as a prompt; AI optimizes the schedule around it |
+| 🎓 **Student Profile** | Name, age, school and grade — set once on first launch, used to personalise every plan |
+| 🕒 **Daily Routine** | Morning / school / after-school / evening timeframes the AI builds plans around |
+| 📋 **Activity Tracking** | School, sports, medical and hobby activities with recurrence; one-time **special events** highlighted |
+| 📚 **Academic Tracker** | Subjects (difficulty, homework frequency, exam dates) and deadlines with AI-generated reminder plans |
+| 🤖 **AI Schedule** | Gemma 4 builds a 1-day, multi-day or weekly plan with study sessions, relax time and conflict detection |
 
 ---
 
@@ -161,8 +127,7 @@ erDiagram
 | Frontend | React 18, TypeScript, Tailwind CSS, Zustand, React Router |
 | Backend | FastAPI, SQLAlchemy (async), Pydantic v2 |
 | Database | SQLite (dev) → PostgreSQL-ready (one env-var swap) |
-| AI | **Groq free API** — Llama 3.3-70b-versatile |
-| Calendar | Google Calendar API v3, OAuth 2.0 |
+| AI | **Gemma 4 26B A4B** on Google Vertex AI (serverless MaaS), auth via Application Default Credentials |
 | Markdown | react-markdown + remark-gfm (table support) |
 
 ---
@@ -173,7 +138,7 @@ erDiagram
 ```bash
 cd backend
 pip install -r requirements.txt
-cp .env.example .env     # fill in GROQ_API_KEY
+cp .env.example .env     # set VERTEX_PROJECT_ID
 uvicorn app.main:app --reload
 # API docs → http://localhost:8000/docs
 ```
@@ -186,13 +151,21 @@ npm start
 # App → http://localhost:3000
 ```
 
-**3. Get a free Groq API key**
+On first launch the app asks for the student's profile; everything else hangs off it.
 
-Sign up at [console.groq.com](https://console.groq.com) — no credit card required.
-Add the key to `backend/.env`:
-```
-GROQ_API_KEY=gsk_...
-```
+**3. Connect Vertex AI (Gemma 4)**
+
+1. In your Google Cloud project, enable the Vertex AI API and enable **Gemma 4 26B A4B IT (MaaS)** in Model Garden.
+2. Authenticate locally (or set `GOOGLE_APPLICATION_CREDENTIALS` to a service-account key with the *Vertex AI User* role):
+   ```bash
+   gcloud auth application-default login
+   ```
+3. Set your project in `backend/.env`:
+   ```
+   VERTEX_PROJECT_ID=your-gcp-project-id
+   ```
+
+Without credentials the app still runs and returns placeholder plans.
 
 ---
 
@@ -200,7 +173,7 @@ GROQ_API_KEY=gsk_...
 
 Change one line in `backend/.env`:
 ```bash
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/family_aid
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/student_aid
 ```
 Then install the async driver and run:
 ```bash
@@ -213,15 +186,14 @@ pip install asyncpg
 ## Project Structure
 
 ```
-family_aid/
+student_aid/
 ├── backend/
 │   ├── app/
-│   │   ├── api/routes/        # family · activities · subjects · schedule · study_plan · calendar
+│   │   ├── api/routes/        # student · activities · subjects · deadlines · schedule
 │   │   ├── models/models.py   # SQLAlchemy ORM models
 │   │   ├── schemas/schemas.py # Pydantic request/response schemas
 │   │   ├── services/
-│   │   │   ├── ai_service.py        # Groq LLM — schedule, report, study plan
-│   │   │   └── calendar_service.py  # Google Calendar OAuth + sync
+│   │   │   └── ai_service.py        # Gemma 4 via Vertex AI — plan generation, deadline reminders
 │   │   ├── core/config.py     # Settings loaded from .env
 │   │   ├── db/database.py     # Async SQLAlchemy engine
 │   │   └── main.py            # FastAPI app + CORS
@@ -229,12 +201,11 @@ family_aid/
 │   └── .env.example
 └── frontend/
     └── src/
-        ├── pages/             # Dashboard · Family · Activities · Schedule
-        │                      # StudyPlan · Reports · Calendar · Settings
+        ├── pages/             # Dashboard · Activities · StudyPlanner (Academic Tracker)
+        │                      # Schedule · Profile · Settings
         ├── components/
-        │   ├── layout/        # Sidebar (family switcher) · Layout
-        │   ├── family/        # MemberCard · MemberForm
-        │   └── schedule/      # ScheduleViewer · StudyPlanViewer
+        │   ├── layout/        # Sidebar · Layout (loads profile, onboarding)
+        │   └── profile/       # ProfileForm
         ├── services/api.ts    # Typed Axios client
         ├── store/appStore.ts  # Zustand global state
         └── types/index.ts     # TypeScript interfaces

@@ -1,4 +1,4 @@
-# Family AI Assistant — Setup Guide
+# Student AI Assistant — Setup Guide
 
 ## Quick Start
 
@@ -25,23 +25,19 @@ npm start
 
 ## Configuration
 
-### Free AI — Groq (Llama 3.3-70b)
-1. Sign up at https://console.groq.com (free, no credit card)
-2. Create an API key
-3. Add to `backend/.env`:
+### AI — Gemma 4 on Google Vertex AI
+1. In a Google Cloud project with billing, enable the **Vertex AI API**
+2. In Model Garden, open **Gemma 4 26B A4B IT (MaaS)** and enable it
+3. Authenticate with Application Default Credentials:
    ```
-   GROQ_API_KEY=gsk_your_key_here
+   gcloud auth application-default login
    ```
-
-### Google Calendar (Optional)
-1. Go to https://console.cloud.google.com
-2. Create project → Enable **Google Calendar API**
-3. Create **OAuth 2.0 Web Application** credentials
-4. Add redirect URI: `http://localhost:8000/api/calendar/oauth/callback`
-5. Add to `backend/.env`:
+   (or set `GOOGLE_APPLICATION_CREDENTIALS` to a service-account key with the *Vertex AI User* role)
+4. Add to `backend/.env`:
    ```
-   GOOGLE_CLIENT_ID=your-client-id
-   GOOGLE_CLIENT_SECRET=your-client-secret
+   VERTEX_PROJECT_ID=your-gcp-project-id
+   VERTEX_LOCATION=global
+   VERTEX_MODEL=google/gemma-4-26b-a4b-it-maas
    ```
 
 ---
@@ -53,7 +49,7 @@ npm start
 pip install asyncpg
 
 # 2. Update backend/.env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/family_aid
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/student_aid
 
 # 3. Run migrations
 alembic upgrade head
@@ -64,19 +60,19 @@ alembic upgrade head
 ## Project Structure
 
 ```
-family_aid/
+student_aid/
 ├── backend/
 │   ├── app/
 │   │   ├── api/routes/      # REST endpoints
-│   │   │   ├── family.py    # Family & member CRUD
+│   │   │   ├── student.py   # Student profile
 │   │   │   ├── activities.py# Activity management
-│   │   │   ├── schedule.py  # AI schedule generation
-│   │   │   └── calendar.py  # Google Calendar sync
+│   │   │   ├── subjects.py  # Subjects
+│   │   │   ├── deadlines.py # Deadlines + AI reminders
+│   │   │   └── schedule.py  # AI plan generation
 │   │   ├── models/          # SQLAlchemy ORM models
 │   │   ├── schemas/         # Pydantic request/response schemas
 │   │   ├── services/
-│   │   │   ├── ai_service.py      # Groq LLM integration
-│   │   │   └── calendar_service.py# Google Calendar API
+│   │   │   └── ai_service.py      # Gemma 4 (Vertex AI) integration
 │   │   ├── core/config.py   # Settings from .env
 │   │   ├── db/database.py   # SQLAlchemy async engine
 │   │   └── main.py          # FastAPI app entrypoint
@@ -95,20 +91,8 @@ family_aid/
 
 ## Features
 
-- **Family Management** — Add parents, students, guardians with color coding
-- **Activity Tracking** — School, sports, family events with recurrence
-- **AI Schedule Generation** — Llama 3.3-70b creates daily schedules per member or whole family
-- **Google Calendar Sync** — Push activities to Google Calendar via OAuth
+- **Student Profile** — One student per app instance; set up on first launch
+- **Activity Tracking** — School, sports, medical and hobby activities with recurrence
+- **Academic Tracker** — Subjects, deadlines and AI-generated reminder plans
+- **AI Schedule Generation** — Gemma 4 creates 1-day, multi-day or weekly plans around your daily routine
 - **Conflict Detection** — AI identifies scheduling conflicts and suggests resolutions
-- **Student Planning** — Protects homework time, handles school + sports schedules
-
-## Free LLM Options
-
-| Provider | Model | Free Tier |
-|----------|-------|-----------|
-| **Groq** (recommended) | Llama 3.3-70b | 14,400 req/day |
-| Ollama (local) | Any | Unlimited (local GPU) |
-| HuggingFace | Various | Limited |
-| Google Gemini | Gemini 1.5 Flash | 15 req/min |
-
-To use Ollama instead of Groq, change `ai_service.py` to call `http://localhost:11434/api/chat`.

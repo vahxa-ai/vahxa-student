@@ -2,21 +2,17 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "Family AI Assistant"
+    app_name: str = "Student AI Assistant"
     debug: bool = True
     secret_key: str = "dev-secret-key"
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./family_aid.db"
+    database_url: str = "sqlite+aiosqlite:///./student_aid.db"
 
-    # Groq (free LLM)
-    groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
-
-    # Google Calendar
-    google_client_id: str = ""
-    google_client_secret: str = ""
-    google_redirect_uri: str = "http://localhost:8000/api/calendar/oauth/callback"
+    # Vertex AI — Gemma 4 (serverless MaaS). Auth via Application Default Credentials.
+    vertex_project_id: str = ""   # empty = project from ADC / gcloud config
+    vertex_location: str = "global"
+    vertex_model: str = "google/gemma-4-26b-a4b-it-maas"
 
     # CORS
     frontend_url: str = "http://localhost:3000"

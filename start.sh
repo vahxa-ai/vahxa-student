@@ -1,14 +1,14 @@
 #!/bin/bash
 # Start both backend and frontend in parallel
 
-echo "🏠 Starting Family AI Assistant..."
+echo "🎓 Starting Student AI Assistant..."
 
 # Backend
 echo "▶ Starting FastAPI backend on http://localhost:8000"
 cd backend
 if [ ! -f ".env" ]; then
   cp .env.example .env
-  echo "⚠  Created backend/.env from example — please add your GROQ_API_KEY"
+  echo "⚠  Created backend/.env from example — please set VERTEX_PROJECT_ID"
 fi
 pip install -r requirements.txt -q
 uvicorn app.main:app --reload --port 8000 &
