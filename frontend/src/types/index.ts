@@ -1,8 +1,15 @@
 export type ActivityType = "school" | "sports" | "medical" | "hobby" | "other";
 export type RecurrenceType = "none" | "daily" | "weekly" | "monthly";
 
+export type StudentStatus = "awaiting_consent" | "awaiting_approval" | "approved" | "rejected" | "suspended";
+export type ConsentStatus = "pending" | "granted" | "revoked" | "superseded";
+
 export interface Student {
   id: number;
+  status: StudentStatus | null;
+  status_note: string | null;
+  parent_name: string | null;
+  parent_email: string | null;
   name: string;
   age: number | null;
   school: string | null;
@@ -114,4 +121,78 @@ export interface Plan {
   content: string;
   start_date: string;
   end_date: string | null;
+}
+
+// --- Accounts ---
+
+export interface User {
+  id: number;
+  email: string;
+  name: string | null;
+  picture: string | null;
+  is_admin: boolean;
+}
+
+export interface ConsentSummary {
+  status: ConsentStatus;
+  parent_email: string;
+  requested_at: string;
+  last_sent_at: string | null;
+  expires_at: string;
+  granted_at: string | null;
+}
+
+export interface Me {
+  user: User;
+  student: Student | null;
+  consent: ConsentSummary | null;
+  is_parent: boolean;
+}
+
+export interface ConsentInfo {
+  status: ConsentStatus;
+  expired: boolean;
+  student_name: string;
+  student_email: string;
+  parent_email: string;
+  consent_version: string;
+}
+
+export interface ParentChild {
+  consent_id: number;
+  student_name: string;
+  student_email: string;
+  consent_status: ConsentStatus;
+  student_status: StudentStatus | null;
+  granted_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface AdminConsent {
+  status: ConsentStatus;
+  parent_email: string;
+  parent_full_name: string | null;
+  relationship: string | null;
+  consent_version: string | null;
+  requested_at: string;
+  granted_at: string | null;
+  granted_ip: string | null;
+  revoked_at: string | null;
+}
+
+export interface AdminStudent {
+  id: number;
+  name: string;
+  email: string | null;
+  age: number | null;
+  grade: string | null;
+  school: string | null;
+  location: string;
+  status: StudentStatus | null;
+  status_note: string | null;
+  status_changed_at: string | null;
+  created_at: string;
+  parent_name: string | null;
+  parent_email: string | null;
+  consent: AdminConsent | null;
 }

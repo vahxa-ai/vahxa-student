@@ -29,7 +29,7 @@ const PlanViewer: React.FC<{ plan: Plan; onPrint: () => void }> = ({ plan, onPri
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-indigo-100 overflow-hidden print:shadow-none print:border-0">
       <div className="px-6 py-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-600 to-violet-700 text-white print:bg-none print:text-gray-900">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-indigo-200">AI Schedule</p>
             <h2 className="text-lg font-bold mt-0.5">{startLabel}{endLabel}</h2>
@@ -121,7 +121,7 @@ export const SchedulePage: React.FC = () => {
     : null;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-7">
@@ -169,7 +169,7 @@ export const SchedulePage: React.FC = () => {
             <input type="date" className={inputCls + " max-w-xs"} value={startDate} onChange={(e) => onStartDateChange(e.target.value)} />
           )}
           {dayMode === "multi" && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <input type="date" className={inputCls} value={startDate} onChange={(e) => onStartDateChange(e.target.value)} />
               <span className="text-gray-400 text-sm flex-shrink-0">to</span>
               <input type="date" min={startDate} className={inputCls} value={endDate} onChange={(e) => setEndDate(e.target.value)} />

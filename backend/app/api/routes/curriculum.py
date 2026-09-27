@@ -7,19 +7,13 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import Subject, CurriculumUnit
+from app.models.models import Subject, CurriculumUnit, Student
 from app.schemas.schemas import CurriculumOut, CurriculumUnitOut, UnitDetails, PracticeQuestion
 from app.services import ai_service, curriculum_library
-from app.api.routes.student import get_student_or_404
+from app.api.deps import get_approved_student
+from app.api.routes.subjects import own_subject
 
 router = APIRouter(prefix="/subjects/{subject_id}/curriculum", tags=["curriculum"])
-
-
-async def _get_subject(subject_id: int, db: AsyncSession) -> Subject:
-    subject = await db.get(Subject, subject_id)
-    if not subject:
-        raise HTTPException(status_code=404, detail="Subject not found")
-    return subject
 
 
 async def _list_units(subject_id: int, db: AsyncSession) -> list[CurriculumUnit]:
@@ -91,17 +85,18 @@ async def _replace_units(subject: Subject, units: list[dict], db: AsyncSession) 
 
 
 @router.get("", response_model=CurriculumOut)
-async def get_curriculum(subject_id: int, db: AsyncSession = Depends(get_db)):
-    subject = await _get_subject(subject_id, db)
+async def get_curriculum(subject_id: int, student: Student = Depends(get_approved_student),
+                         db: AsyncSession = Depends(get_db)):
+    subject = await own_subject(subject_id, student, db)
     return _curriculum_out(subject, await _list_units(subject_id, db))
 
 
 @router.post("/generate", response_model=CurriculumOut)
-async def generate_curriculum(subject_id: int, force: bool = False, db: AsyncSession = Depends(get_db)):
+async def generate_curriculum(subject_id: int, force: bool = False, student: Student = Depends(get_approved_student),
+                              db: AsyncSession = Depends(get_db)):
     """Load the unit list. Uses the shared library for this student's category when possible;
     force=true (Regenerate) always calls the AI and replaces the shared copy."""
-    subject = await _get_subject(subject_id, db)
-    student = await get_student_or_404(db)
+    subject = await own_subject(subject_id, student, db)
     cat = curriculum_library.category(student, subject)
     key = curriculum_library.category_key(cat) if cat else None
 
@@ -132,11 +127,12 @@ async def generate_curriculum(subject_id: int, force: bool = False, db: AsyncSes
 
 @router.post("/units/{unit_id}/details", response_model=CurriculumUnitOut)
 async def generate_unit_details(
-    subject_id: int, unit_id: int, force: bool = False, db: AsyncSession = Depends(get_db)
+    subject_id: int, unit_id: int, force: bool = False,
+    student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)
 ):
     """Summary, key concepts and formulas for one unit. Served from the local copy or the shared
     library when available; force=true (Refresh notes) always calls the AI and updates the shared copy."""
-    subject = await _get_subject(subject_id, db)
+    subject = await own_subject(subject_id, student, db)
     unit = await db.get(CurriculumUnit, unit_id)
     if not unit or unit.subject_id != subject_id:
         raise HTTPException(status_code=404, detail="Unit not found")
@@ -155,7 +151,6 @@ async def generate_unit_details(
             await db.flush()
             return _unit_out(unit, from_library=True)
 
-    student = await get_student_or_404(db)
     titles = [u.title for u in await _list_units(subject_id, db)]
     details = await _run_ai(ai_service.generate_unit_details(student, subject, unit, titles))
     unit.details_json = json.dumps(details)
@@ -176,11 +171,12 @@ async def _get_unit(subject_id: int, unit_id: int, db: AsyncSession) -> Curricul
 
 @router.post("/units/{unit_id}/practice", response_model=CurriculumUnitOut)
 async def generate_unit_practice(
-    subject_id: int, unit_id: int, force: bool = False, db: AsyncSession = Depends(get_db)
+    subject_id: int, unit_id: int, force: bool = False,
+    student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)
 ):
     """Exam-style practice questions with worked answers for one unit. Served from the local copy or the
     shared library when available; force=true (New questions) always calls the AI and updates the shared copy."""
-    subject = await _get_subject(subject_id, db)
+    subject = await own_subject(subject_id, student, db)
     unit = await _get_unit(subject_id, unit_id, db)
 
     if unit.practice_json and not force:
@@ -197,7 +193,6 @@ async def generate_unit_practice(
             await db.flush()
             return _unit_out(unit, from_library=True)
 
-    student = await get_student_or_404(db)
     details = json.loads(unit.details_json) if unit.details_json else None
     practice = await _run_ai(ai_service.generate_unit_practice(student, subject, unit, details))
     unit.practice_json = json.dumps(practice)

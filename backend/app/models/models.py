@@ -7,6 +7,21 @@ import enum
 from app.db.database import Base
 
 
+class StudentStatus(str, enum.Enum):
+    awaiting_consent = "awaiting_consent"      # profile done, waiting for a parent to consent
+    awaiting_approval = "awaiting_approval"    # parent consented, waiting for an admin
+    approved = "approved"
+    rejected = "rejected"
+    suspended = "suspended"
+
+
+class ConsentStatus(str, enum.Enum):
+    pending = "pending"
+    granted = "granted"
+    revoked = "revoked"
+    superseded = "superseded"                  # replaced by a newer request (e.g. parent email changed)
+
+
 class ActivityType(str, enum.Enum):
     school = "school"
     sports = "sports"
@@ -44,11 +59,32 @@ class RecurrenceType(str, enum.Enum):
     monthly = "monthly"
 
 
+class User(Base):
+    """A Google account that has signed in (student, parent, or admin)."""
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    google_sub: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)  # None = pre-provisioned
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)                # stored lowercase
+    name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    picture: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class Student(Base):
-    """The single student this app instance plans for (one row)."""
+    """A student's profile. Every activity, subject and deadline belongs to one student."""
     __tablename__ = "student"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Nullable only so the additive startup migration can add it to existing tables; always set in code.
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True, index=True)
+    status: Mapped[Optional[StudentStatus]] = mapped_column(SAEnum(StudentStatus), nullable=True)
+    parent_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    parent_email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    status_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    status_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # e.g. admin's reason
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     school: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
@@ -65,10 +101,35 @@ class Student(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ParentalConsent(Base):
+    """A request for (and record of) a parent's consent for one student.
+    The parent must sign in with the Google account matching parent_email to grant it."""
+    __tablename__ = "parental_consents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("student.id"), nullable=False, index=True)
+    parent_email: Mapped[str] = mapped_column(String(320), nullable=False)       # lowercase
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    status: Mapped[ConsentStatus] = mapped_column(SAEnum(ConsentStatus), default=ConsentStatus.pending)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Filled in when granted — the audit record
+    parent_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    parent_full_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    relationship: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    consent_version: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    granted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    granted_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    granted_user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class Activity(Base):
     __tablename__ = "activities"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    student_id: Mapped[Optional[int]] = mapped_column(ForeignKey("student.id"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     activity_type: Mapped[ActivityType] = mapped_column(SAEnum(ActivityType), default=ActivityType.other)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -92,6 +153,7 @@ class Subject(Base):
     __tablename__ = "subjects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    student_id: Mapped[Optional[int]] = mapped_column(ForeignKey("student.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)       # e.g. "Algebra", "Biology"
     teacher: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     difficulty: Mapped[SubjectDifficulty] = mapped_column(SAEnum(SubjectDifficulty), default=SubjectDifficulty.medium)
@@ -138,6 +200,7 @@ class Deadline(Base):
     __tablename__ = "deadlines"
 
     id:          Mapped[int]           = mapped_column(Integer, primary_key=True, index=True)
+    student_id:  Mapped[Optional[int]] = mapped_column(ForeignKey("student.id"), nullable=True, index=True)
     subject_id:  Mapped[Optional[int]] = mapped_column(ForeignKey("subjects.id"), nullable=True)
     title:       Mapped[str]           = mapped_column(String(200), nullable=False)
     deadline_type: Mapped[DeadlineType] = mapped_column(SAEnum(DeadlineType), default=DeadlineType.other)

@@ -1,7 +1,23 @@
 from datetime import datetime, date, time
 from typing import Optional
-from pydantic import BaseModel
-from app.models.models import ActivityType, RecurrenceType, SubjectDifficulty, HomeworkFrequency, DeadlineType
+from pydantic import BaseModel, Field
+import re
+
+from pydantic import field_validator
+
+from app.models.models import (
+    ActivityType, RecurrenceType, SubjectDifficulty, HomeworkFrequency, DeadlineType,
+    StudentStatus, ConsentStatus,
+)
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _clean_email(value: str) -> str:
+    value = (value or "").strip().lower()
+    if not _EMAIL_RE.match(value) or len(value) > 320:
+        raise ValueError("Enter a valid email address")
+    return value
 
 
 # --- Student profile ---
@@ -32,6 +48,10 @@ class StudentUpdate(BaseModel):
 
 class StudentOut(BaseModel):
     id: int
+    status: Optional[StudentStatus] = None
+    status_note: Optional[str] = None
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None
     name: str
     age: Optional[int]
     school: Optional[str]
@@ -239,3 +259,129 @@ class DeadlineOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Accounts ---
+
+class GoogleSignInRequest(BaseModel):
+    credential: str
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    name: Optional[str]
+    picture: Optional[str]
+    is_admin: bool = False
+
+
+class ConsentSummary(BaseModel):
+    status: ConsentStatus
+    parent_email: str
+    requested_at: datetime
+    last_sent_at: Optional[datetime]
+    expires_at: datetime
+    granted_at: Optional[datetime]
+
+
+class MeOut(BaseModel):
+    user: UserOut
+    student: Optional[StudentOut] = None
+    consent: Optional[ConsentSummary] = None        # latest consent request for this student
+    is_parent: bool = False                          # has granted/pending consents as a parent
+
+
+class AuthConfigOut(BaseModel):
+    google_client_id: str
+    consent_version: str
+
+
+class OnboardingRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    age: Optional[int] = Field(default=None, ge=3, le=25)
+    school: Optional[str] = Field(default=None, max_length=200)
+    grade: Optional[str] = Field(default=None, max_length=20)
+    county: Optional[str] = Field(default=None, max_length=100)
+    state: Optional[str] = Field(default=None, max_length=100)
+    country: Optional[str] = Field(default=None, max_length=100)
+    timezone: str = "America/New_York"
+    parent_name: str = Field(min_length=1, max_length=200)
+    parent_email: str
+
+    @field_validator("parent_email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _clean_email(v)
+
+
+class ParentContactUpdate(BaseModel):
+    parent_name: str = Field(min_length=1, max_length=200)
+    parent_email: str
+
+    @field_validator("parent_email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _clean_email(v)
+
+
+# --- Parental consent ---
+
+class ConsentInfoOut(BaseModel):
+    """What a parent sees when opening a consent link."""
+    status: ConsentStatus
+    expired: bool
+    student_name: str
+    student_email: str
+    parent_email: str               # the Google account that must sign in to consent
+    consent_version: str
+
+
+class ConsentGrantRequest(BaseModel):
+    parent_full_name: str = Field(min_length=2, max_length=200)
+    relationship: str = Field(min_length=2, max_length=50)
+    agree: bool
+
+
+class ParentChildOut(BaseModel):
+    consent_id: int
+    student_name: str
+    student_email: str
+    consent_status: ConsentStatus
+    student_status: Optional[StudentStatus]
+    granted_at: Optional[datetime]
+    revoked_at: Optional[datetime]
+
+
+# --- Admin ---
+
+class AdminConsentOut(BaseModel):
+    status: ConsentStatus
+    parent_email: str
+    parent_full_name: Optional[str]
+    relationship: Optional[str]
+    consent_version: Optional[str]
+    requested_at: datetime
+    granted_at: Optional[datetime]
+    granted_ip: Optional[str]
+    revoked_at: Optional[datetime]
+
+
+class AdminStudentOut(BaseModel):
+    id: int
+    name: str
+    email: Optional[str]
+    age: Optional[int]
+    grade: Optional[str]
+    school: Optional[str]
+    location: str
+    status: Optional[StudentStatus]
+    status_note: Optional[str]
+    status_changed_at: Optional[datetime]
+    created_at: datetime
+    parent_name: Optional[str]
+    parent_email: Optional[str]
+    consent: Optional[AdminConsentOut]
+
+
+class AdminActionRequest(BaseModel):
+    note: Optional[str] = Field(default=None, max_length=1000)

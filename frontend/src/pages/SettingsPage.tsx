@@ -3,7 +3,7 @@ import { ExternalLink } from "lucide-react";
 
 export const SettingsPage: React.FC = () => {
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Settings & Setup</h1>
 
       <div className="space-y-6">

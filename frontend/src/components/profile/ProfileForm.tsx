@@ -49,8 +49,8 @@ export const ProfileForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, o
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
           <input
             required autoFocus
@@ -72,7 +72,7 @@ export const ProfileForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, o
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
           <input
@@ -94,7 +94,7 @@ export const ProfileForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, o
       </div>
 
       <div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">County / District</label>
             <input

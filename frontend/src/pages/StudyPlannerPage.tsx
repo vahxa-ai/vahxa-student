@@ -207,7 +207,7 @@ export const StudyPlannerPage: React.FC = () => {
   const doneDeadlines  = deadlines.filter((d) => d.completed);
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
@@ -263,8 +263,8 @@ export const StudyPlannerPage: React.FC = () => {
                     </p>
                   </Link>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => startSubjectEdit(sub)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={13} /></button>
-                    <button onClick={() => handleDeleteSubject(sub.id)} disabled={deletingSubjectId === sub.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40">
+                    <button onClick={() => startSubjectEdit(sub)} aria-label={`Edit ${sub.name}`} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={13} /></button>
+                    <button onClick={() => handleDeleteSubject(sub.id)} aria-label={`Delete ${sub.name}`} disabled={deletingSubjectId === sub.id} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40">
                       {deletingSubjectId === sub.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                     </button>
                   </div>
@@ -452,8 +452,8 @@ export const StudyPlannerPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => startDeadlineEdit(dl)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors"><Pencil size={13} /></button>
-                      <button onClick={() => handleDeleteDeadline(dl.id)} disabled={deletingDeadlineId === dl.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors disabled:opacity-40">
+                      <button onClick={() => startDeadlineEdit(dl)} aria-label={`Edit ${dl.title}`} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors"><Pencil size={13} /></button>
+                      <button onClick={() => handleDeleteDeadline(dl.id)} aria-label={`Delete ${dl.title}`} disabled={deletingDeadlineId === dl.id} className="p-2 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors disabled:opacity-40">
                         {deletingDeadlineId === dl.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                       </button>
                     </div>
@@ -479,7 +479,7 @@ export const StudyPlannerPage: React.FC = () => {
                       </button>
                       <span className="text-sm text-gray-500 line-through flex-1">{dl.title}</span>
                       <span className="text-xs text-gray-400">{typeInfo?.icon} {dl.due_date}</span>
-                      <button onClick={() => handleDeleteDeadline(dl.id)} className="p-1 text-gray-300 hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                      <button onClick={() => handleDeleteDeadline(dl.id)} aria-label={`Delete ${dl.title}`} className="p-2 text-gray-400 hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
                     </div>
                   );
                 })}

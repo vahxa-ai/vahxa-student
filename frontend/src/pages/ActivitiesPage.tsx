@@ -376,8 +376,8 @@ export const ActivitiesPage: React.FC = () => {
   const fieldCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Activities</h1>
           <p className="text-gray-500 text-sm mt-1">Your classes, sports, appointments and other commitments</p>
@@ -392,16 +392,16 @@ export const ActivitiesPage: React.FC = () => {
 
       {/* Activity form modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 my-8 p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
+          <div role="dialog" aria-modal="true" aria-label={editingActivity ? "Edit activity" : "Add activity"} className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg sm:mx-4 max-h-[92vh] overflow-y-auto p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-gray-800">
                 {editingActivity ? "Edit Activity" : "Add Activity"}
               </h2>
-              <button onClick={closeForm} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+              <button onClick={closeForm} aria-label="Close" className="p-2 -mr-2 text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                   <input required className={fieldCls} value={form.title} onChange={(e) => setField("title", e.target.value)} placeholder="e.g., Soccer Practice" />
@@ -415,7 +415,7 @@ export const ActivitiesPage: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                   <input type="date" className={fieldCls} value={form.start_date} onChange={(e) => setField("start_date", e.target.value)} />
@@ -425,7 +425,7 @@ export const ActivitiesPage: React.FC = () => {
                   <input type="date" className={fieldCls} value={form.end_date} onChange={(e) => setField("end_date", e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                   <input type="time" className={fieldCls} value={form.start_time} onChange={(e) => setField("start_time", e.target.value)} />
@@ -435,7 +435,7 @@ export const ActivitiesPage: React.FC = () => {
                   <input type="number" min={5} className={fieldCls} value={form.duration_minutes} onChange={(e) => setField("duration_minutes", e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Recurrence</label>
                   <select className={fieldCls} value={form.recurrence} onChange={(e) => setField("recurrence", e.target.value)}>
@@ -499,8 +499,8 @@ export const ActivitiesPage: React.FC = () => {
                   <h3 className="w-full font-semibold text-gray-800 mt-0.5">{act.title}</h3>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button onClick={() => openEdit(act)} className="p-1 text-gray-300 hover:text-indigo-500 transition-colors"><Pencil size={14} /></button>
-                  <button onClick={() => handleDelete(act)} className="p-1 text-gray-300 hover:text-red-400 transition-colors"><X size={16} /></button>
+                  <button onClick={() => openEdit(act)} aria-label={`Edit ${act.title}`} className="p-2 text-gray-400 hover:text-indigo-500 transition-colors"><Pencil size={15} /></button>
+                  <button onClick={() => handleDelete(act)} aria-label={`Delete ${act.title}`} className="p-2 text-gray-400 hover:text-red-400 transition-colors"><X size={17} /></button>
                 </div>
               </div>
               <div className="space-y-1 text-sm text-gray-500">

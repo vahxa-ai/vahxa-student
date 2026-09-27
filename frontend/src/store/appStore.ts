@@ -1,15 +1,21 @@
 import { create } from "zustand";
-import type { Student } from "../types";
+import type { Me, Student } from "../types";
 
 interface AppState {
+  /** Signed-in account (null = signed out). */
+  me: Me | null;
+  /** The signed-in student's profile — kept in sync with me.student. */
   student: Student | null;
-  /** True once the profile fetch has finished (student may still be null). */
+  /** True once the session check has finished. */
   loaded: boolean;
+  setMe: (me: Me | null) => void;
   setStudent: (student: Student | null) => void;
 }
 
 export const useAppStore = create<AppState>()((set) => ({
+  me: null,
   student: null,
   loaded: false,
-  setStudent: (student) => set({ student, loaded: true }),
+  setMe: (me) => set({ me, student: me?.student ?? null, loaded: true }),
+  setStudent: (student) => set((s) => ({ student, me: s.me && { ...s.me, student } })),
 }));

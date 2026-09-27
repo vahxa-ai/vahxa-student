@@ -1,14 +1,16 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.db.database import init_db
-from app.api.routes import student, activities, schedule, subjects, deadlines, curriculum
+from app.api.routes import (
+    student, activities, schedule, subjects, deadlines, curriculum, auth, onboarding, consent, admin,
+)
 
 
 @asynccontextmanager
@@ -31,6 +33,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def csrf_guard(request: Request, call_next):
+    """Session cookies authenticate API calls, so require a custom header on state-changing requests.
+    Browsers won't send it cross-site without a CORS preflight, which only our own origins pass."""
+    unsafe = request.method not in ("GET", "HEAD", "OPTIONS")
+    if unsafe and request.url.path.startswith("/api/") and request.headers.get("x-requested-with") != "XMLHttpRequest":
+        return JSONResponse(status_code=403, content={"detail": "Missing X-Requested-With header."})
+    return await call_next(request)
+
+
+app.include_router(auth.router, prefix="/api")
+app.include_router(onboarding.router, prefix="/api")
+app.include_router(consent.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 app.include_router(student.router, prefix="/api")
 app.include_router(activities.router, prefix="/api")
 app.include_router(subjects.router, prefix="/api")

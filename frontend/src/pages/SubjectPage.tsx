@@ -222,7 +222,7 @@ export const SubjectPage: React.FC = () => {
 
   if (loadError) {
     return (
-      <div className="p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <Link to="/study-planner" className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 mb-4">
           <ArrowLeft size={14} /> Academic Tracker
         </Link>
@@ -231,13 +231,13 @@ export const SubjectPage: React.FC = () => {
     );
   }
   if (!subject || !curriculum) {
-    return <div className="p-8 text-sm text-gray-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>;
+    return <div className="p-4 sm:p-6 lg:p-8 text-sm text-gray-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>;
   }
 
   const hasUnits = curriculum.units.length > 0;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <Link to="/study-planner" className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 mb-4">
         <ArrowLeft size={14} /> Academic Tracker
       </Link>
@@ -389,7 +389,7 @@ export const SubjectPage: React.FC = () => {
                   </button>
 
                   {open && (
-                    <div className="px-5 pb-5 pl-14">
+                    <div className="px-4 pb-5 sm:px-5 sm:pl-14">
                       {loading ? (
                         <p className="flex items-center gap-2 text-sm text-gray-500 py-3">
                           <Loader2 size={14} className="animate-spin text-indigo-500" />

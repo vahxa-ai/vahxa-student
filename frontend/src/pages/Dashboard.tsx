@@ -53,13 +53,13 @@ export const Dashboard: React.FC = () => {
 
   /* ── Main Dashboard ────────────────────────────────────────── */
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6 sm:mb-8">
         <div>
           <p className="text-xs font-semibold text-indigo-500 uppercase tracking-widest mb-1">Good day 👋</p>
-          <h1 className="text-3xl font-bold text-gray-800">{student?.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{student?.name}</h1>
           <p className="text-gray-400 text-sm mt-1">Here's your overview for today</p>
         </div>
       </div>

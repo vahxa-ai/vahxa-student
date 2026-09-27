@@ -27,6 +27,32 @@ class Settings(BaseSettings):
     # Path to the React build to serve from this service (set in the container); empty = API only
     frontend_dist: str = ""
 
+    # ─── Accounts ─────────────────────────────────────────────────────────────
+    # Web OAuth client used by "Sign in with Google" (ID tokens are verified against it)
+    google_oauth_client_id: str = ""
+    # Signs session cookies — set a long random value in production (Secret Manager)
+    session_secret: str = ""
+    session_days: int = 7
+    cookie_secure: bool = True
+    # Comma-separated admin emails
+    admin_emails: str = ""
+    # Public base URL used in emailed links, e.g. https://app.example.com
+    app_base_url: str = "http://localhost:3000"
+    # Bump when the parental consent wording changes; recorded with each consent
+    consent_version: str = "2026-09-27"
+    consent_link_days: int = 14
+
+    # ─── Email (SMTP) ─────────────────────────────────────────────────────────
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""          # Gmail App Password (Secret Manager in production)
+    email_from: str = ""             # defaults to smtp_user
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
+
     class Config:
         env_file = ".env"
 

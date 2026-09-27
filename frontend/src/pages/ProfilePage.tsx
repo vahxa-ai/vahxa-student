@@ -11,8 +11,8 @@ export const ProfilePage: React.FC = () => {
   if (!student) return null;
 
   return (
-    <div className="p-8 max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">My Profile</h1>
           <p className="text-gray-500 text-sm mt-1">Used to personalise your AI plans and reminders</p>

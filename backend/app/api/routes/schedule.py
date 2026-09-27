@@ -3,19 +3,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db.database import get_db
-from app.models.models import Activity, Subject
+from app.models.models import Activity, Subject, Student
 from app.schemas.schemas import PlanRequest, PlanOut
 from app.services import ai_service
-from app.api.routes.student import get_student_or_404
+from app.api.deps import get_approved_student
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
 
 @router.post("/generate", response_model=PlanOut)
-async def generate_plan(payload: PlanRequest, db: AsyncSession = Depends(get_db)):
-    student = await get_student_or_404(db)
-    activities = list((await db.execute(select(Activity))).scalars().all())
-    subjects = list((await db.execute(select(Subject))).scalars().all())
+async def generate_plan(payload: PlanRequest, student: Student = Depends(get_approved_student),
+                        db: AsyncSession = Depends(get_db)):
+    activities = list((await db.execute(select(Activity).where(Activity.student_id == student.id))).scalars().all())
+    subjects = list((await db.execute(select(Subject).where(Subject.student_id == student.id))).scalars().all())
 
     content = await ai_service.generate_plan(
         student=student,
