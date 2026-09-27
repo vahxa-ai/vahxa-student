@@ -24,6 +24,14 @@ async def list_subjects(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.get("/{subject_id}", response_model=SubjectOut)
+async def get_subject(subject_id: int, db: AsyncSession = Depends(get_db)):
+    subject = await db.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return subject
+
+
 @router.patch("/{subject_id}", response_model=SubjectOut)
 async def update_subject(
     subject_id: int,

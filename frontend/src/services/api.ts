@@ -5,6 +5,8 @@ import type {
   Subject,
   Plan,
   Deadline,
+  Curriculum,
+  CurriculumUnit,
 } from "../types";
 
 const api = axios.create({
@@ -41,12 +43,29 @@ export const activityApi = {
 // --- Subjects ---
 export const subjectApi = {
   list: () => api.get<Subject[]>("/subjects").then((r) => r.data),
+  get: (subjectId: number) => api.get<Subject>(`/subjects/${subjectId}`).then((r) => r.data),
   create: (data: Partial<Subject> & { name: string }) =>
     api.post<Subject>("/subjects", data).then((r) => r.data),
   update: (subjectId: number, data: Partial<Subject>) =>
     api.patch<Subject>(`/subjects/${subjectId}`, data).then((r) => r.data),
   delete: (subjectId: number) => api.delete(`/subjects/${subjectId}`),
 };
+
+// --- Curriculum (per subject) ---
+export const curriculumApi = {
+  get: (subjectId: number) =>
+    api.get<Curriculum>(`/subjects/${subjectId}/curriculum`).then((r) => r.data),
+  generate: (subjectId: number) =>
+    api.post<Curriculum>(`/subjects/${subjectId}/curriculum/generate`).then((r) => r.data),
+  generateUnitDetails: (subjectId: number, unitId: number) =>
+    api
+      .post<CurriculumUnit>(`/subjects/${subjectId}/curriculum/units/${unitId}/details`)
+      .then((r) => r.data),
+};
+
+/** Human-readable message from an API error (server `detail` when present). */
+export const apiErrorMessage = (err: any, fallback = "Something went wrong. Please try again.") =>
+  err?.response?.data?.detail ?? (err?.response ? fallback : "Can't reach the server. Is the backend running?");
 
 // --- Deadlines ---
 export const deadlineApi = {

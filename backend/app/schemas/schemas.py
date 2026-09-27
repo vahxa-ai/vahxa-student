@@ -11,6 +11,9 @@ class StudentUpsert(BaseModel):
     age: Optional[int] = None
     school: Optional[str] = None
     grade: Optional[str] = None
+    county: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
     timezone: str = "America/New_York"
     default_prompt: Optional[str] = None
 
@@ -20,6 +23,9 @@ class StudentUpdate(BaseModel):
     age: Optional[int] = None
     school: Optional[str] = None
     grade: Optional[str] = None
+    county: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
     timezone: Optional[str] = None
     default_prompt: Optional[str] = None
 
@@ -30,6 +36,9 @@ class StudentOut(BaseModel):
     age: Optional[int]
     school: Optional[str]
     grade: Optional[str]
+    county: Optional[str]
+    state: Optional[str]
+    country: Optional[str]
     timezone: str
     default_prompt: Optional[str]
     created_at: datetime
@@ -97,6 +106,7 @@ class SubjectCreate(BaseModel):
     class_days: Optional[str] = None      # "Mon,Wed,Fri"
     exam_date: Optional[date] = None
     notes: Optional[str] = None
+    syllabus_text: Optional[str] = None
 
 
 class SubjectUpdate(BaseModel):
@@ -108,6 +118,7 @@ class SubjectUpdate(BaseModel):
     class_days: Optional[str] = None
     exam_date: Optional[date] = None
     notes: Optional[str] = None
+    syllabus_text: Optional[str] = None
 
 
 class SubjectOut(BaseModel):
@@ -120,9 +131,49 @@ class SubjectOut(BaseModel):
     class_days: Optional[str]
     exam_date: Optional[date]
     notes: Optional[str]
+    syllabus_text: Optional[str]
+    curriculum_framework: Optional[str]
+    curriculum_source: Optional[str]
+    curriculum_generated_at: Optional[datetime]
 
     class Config:
         from_attributes = True
+
+
+# --- Curriculum ---
+
+class KeyConcept(BaseModel):
+    name: str
+    explanation: str
+
+
+class Formula(BaseModel):
+    name: str
+    expression: str
+    explanation: str = ""
+
+
+class UnitDetails(BaseModel):
+    summary: str
+    key_concepts: list[KeyConcept] = []
+    formulas: list[Formula] = []
+
+
+class CurriculumUnitOut(BaseModel):
+    id: int
+    position: int
+    title: str
+    overview: Optional[str]
+    details: Optional[UnitDetails]
+    details_generated_at: Optional[datetime]
+
+
+class CurriculumOut(BaseModel):
+    subject_id: int
+    framework: Optional[str]
+    source: Optional[str]            # "syllabus" | "standards"
+    generated_at: Optional[datetime]
+    units: list[CurriculumUnitOut]
 
 
 # --- Planner ---

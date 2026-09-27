@@ -53,6 +53,10 @@ class Student(Base):
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     school: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     grade: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # Location — used to pick the curriculum standards (e.g. state standards, national board)
+    county: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York")
 
     # Default prompt used when generating plans (routine + study + sports sections)
@@ -96,9 +100,34 @@ class Subject(Base):
     class_days: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)   # "Mon,Wed,Fri"
     exam_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Curriculum — optional pasted syllabus; the rest is filled in by AI generation
+    syllabus_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    curriculum_framework: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    curriculum_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)   # "syllabus" | "standards"
+    curriculum_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     deadlines: Mapped[list["Deadline"]] = relationship("Deadline", back_populates="subject", cascade="all, delete-orphan")
+    units: Mapped[list["CurriculumUnit"]] = relationship(
+        "CurriculumUnit", back_populates="subject", cascade="all, delete-orphan", order_by="CurriculumUnit.position"
+    )
+
+
+class CurriculumUnit(Base):
+    """One unit/chapter of a subject's curriculum. Details are generated on demand and cached."""
+    __tablename__ = "curriculum_units"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id"), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    overview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    details_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # {summary, key_concepts, formulas}
+    details_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    subject: Mapped["Subject"] = relationship("Subject", back_populates="units")
 
 
 class Deadline(Base):

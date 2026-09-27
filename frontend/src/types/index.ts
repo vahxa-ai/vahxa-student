@@ -7,6 +7,9 @@ export interface Student {
   age: number | null;
   school: string | null;
   grade: string | null;
+  county: string | null;
+  state: string | null;
+  country: string | null;
   timezone: string;
   default_prompt: string | null;
   created_at: string;
@@ -40,6 +43,44 @@ export interface Subject {
   class_days: string | null;
   exam_date: string | null;
   notes: string | null;
+  syllabus_text: string | null;
+  curriculum_framework: string | null;
+  curriculum_source: "syllabus" | "standards" | null;
+  curriculum_generated_at: string | null;
+}
+
+export interface KeyConcept {
+  name: string;
+  explanation: string;
+}
+
+export interface Formula {
+  name: string;
+  expression: string;
+  explanation: string;
+}
+
+export interface UnitDetails {
+  summary: string;
+  key_concepts: KeyConcept[];
+  formulas: Formula[];
+}
+
+export interface CurriculumUnit {
+  id: number;
+  position: number;
+  title: string;
+  overview: string | null;
+  details: UnitDetails | null;
+  details_generated_at: string | null;
+}
+
+export interface Curriculum {
+  subject_id: number;
+  framework: string | null;
+  source: "syllabus" | "standards" | null;
+  generated_at: string | null;
+  units: CurriculumUnit[];
 }
 
 export type DeadlineType = "exam" | "assignment" | "essay" | "internship" | "project" | "other";

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.db.database import init_db
-from app.api.routes import student, activities, schedule, subjects, deadlines
+from app.api.routes import student, activities, schedule, subjects, deadlines, curriculum
 
 
 @asynccontextmanager
@@ -32,6 +32,7 @@ app.include_router(activities.router, prefix="/api")
 app.include_router(subjects.router, prefix="/api")
 app.include_router(schedule.router, prefix="/api")
 app.include_router(deadlines.router, prefix="/api")
+app.include_router(curriculum.router, prefix="/api")
 
 
 @app.get("/api/health")

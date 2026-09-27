@@ -18,6 +18,9 @@ export const ProfileForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, o
     age: initial?.age?.toString() ?? "",
     school: initial?.school ?? "",
     grade: initial?.grade ?? "",
+    county: initial?.county ?? "",
+    state: initial?.state ?? "",
+    country: initial?.country ?? "",
   });
   const [loading, setLoading] = useState(false);
 
@@ -33,6 +36,9 @@ export const ProfileForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, o
         age: form.age ? parseInt(form.age) : null,
         school: form.school.trim() || null,
         grade: form.grade.trim() || null,
+        county: form.county.trim() || null,
+        state: form.state.trim() || null,
+        country: form.country.trim() || null,
         timezone: initial?.timezone,
         default_prompt: initial?.default_prompt ?? null,
       });
@@ -85,6 +91,39 @@ export const ProfileForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, o
             placeholder="e.g., 8th Grade"
           />
         </div>
+      </div>
+
+      <div>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">County / District</label>
+            <input
+              className={inputCls}
+              value={form.county}
+              onChange={(e) => set("county", e.target.value)}
+              placeholder="e.g., Travis County"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">State / Province</label>
+            <input
+              className={inputCls}
+              value={form.state}
+              onChange={(e) => set("state", e.target.value)}
+              placeholder="e.g., Texas"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+            <input
+              className={inputCls}
+              value={form.country}
+              onChange={(e) => set("country", e.target.value)}
+              placeholder="e.g., USA"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 mt-1.5">Used to match your subjects to the right curriculum standards.</p>
       </div>
 
       <div className="flex gap-3 pt-2">

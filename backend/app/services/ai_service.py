@@ -3,7 +3,9 @@ AI plan generation and deadline reminders using Gemma 4 on Google Vertex AI.
 Falls back gracefully if Vertex AI credentials are not configured.
 """
 import asyncio
+import json
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from typing import Optional
 
 import google.auth
@@ -12,7 +14,7 @@ from google.auth.exceptions import DefaultCredentialsError
 from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from app.core.config import settings
-from app.models.models import Student, Activity, Subject
+from app.models.models import Student, Activity, Subject, CurriculumUnit
 
 
 def _format_time(t: Optional[time]) -> str:
@@ -45,16 +47,24 @@ def _describe_student(student: Student) -> str:
 
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 _credentials = None
 _project_id: Optional[str] = None
 
 
 def _load_credentials() -> bool:
-    """Load Application Default Credentials once. Returns False if ADC or a project is unavailable."""
+    """Load credentials once — the configured key file, else Application Default Credentials.
+    Returns False if no credentials or project are available."""
     global _credentials, _project_id
     if _credentials is None:
         try:
-            _credentials, adc_project = google.auth.default(scopes=_SCOPES)
+            if settings.google_credentials_file:
+                key_path = Path(settings.google_credentials_file)
+                if not key_path.is_absolute():
+                    key_path = _BACKEND_DIR / key_path
+                _credentials, adc_project = google.auth.load_credentials_from_file(str(key_path), scopes=_SCOPES)
+            else:
+                _credentials, adc_project = google.auth.default(scopes=_SCOPES)
         except DefaultCredentialsError:
             return False
         _project_id = settings.vertex_project_id or adc_project
@@ -367,3 +377,139 @@ You have {len(deadlines)} upcoming deadline(s):
 """
 
     return await _call_llm(prompt, max_tokens=2500)
+
+
+# ─── Curriculum ───────────────────────────────────────────────────────────────
+
+class AIUnavailableError(RuntimeError):
+    """Raised when a feature needs the LLM but Vertex AI is not configured."""
+
+
+_MAX_SYLLABUS_CHARS = 12000
+
+
+def _curriculum_context(student: Student, subject: Subject) -> str:
+    location = ", ".join(p for p in [student.county, student.state, student.country] if p)
+    lines = [
+        f"Subject: {subject.name}",
+        f"Grade: {student.grade or 'not specified'}",
+        f"School: {student.school or 'not specified'}",
+        f"Location: {location or 'not specified'}",
+    ]
+    if subject.teacher:
+        lines.append(f"Teacher: {subject.teacher}")
+    if subject.notes:
+        lines.append(f"Student notes about this subject: {subject.notes}")
+    return "\n".join(lines)
+
+
+def _parse_json(text: str) -> dict:
+    """Parse a JSON object from model output, tolerating code fences or surrounding prose."""
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("model response contained no JSON object")
+    return json.loads(text[start:end + 1])
+
+
+async def generate_curriculum_outline(student: Student, subject: Subject) -> dict:
+    """Return {"framework": str, "source": "syllabus"|"standards", "units": [{"title", "overview"}]}."""
+    if not _vertex_configured():
+        raise AIUnavailableError("Curriculum generation requires Vertex AI (Gemma 4) to be configured.")
+
+    syllabus = (subject.syllabus_text or "").strip()[:_MAX_SYLLABUS_CHARS]
+    if syllabus:
+        source_rules = f"""The student has provided their school's syllabus / table of contents below.
+Follow it: use its units or chapters, in its order, keeping its titles (you may tidy wording).
+Do not add units that are not in it. Set "framework" to the course or textbook the syllabus describes.
+
+--- SYLLABUS ---
+{syllabus}
+--- END SYLLABUS ---"""
+    else:
+        source_rules = """No syllabus was provided. Infer the curriculum this student most likely follows from the
+grade, subject and location — e.g. the state/provincial standards, national curriculum or exam board
+used there (such as Common Core / TEKS / CBSE / GCSE). Name it in "framework"."""
+
+    prompt = f"""You are an expert curriculum designer. Lay out the curriculum for this course as units or chapters
+in the order they are normally taught across the school year.
+
+{_curriculum_context(student, subject)}
+
+{source_rules}
+
+Return ONLY a JSON object, no markdown, in exactly this shape:
+{{
+  "framework": "short name of the curriculum / standards / textbook",
+  "units": [
+    {{"title": "Unit 1: ...", "overview": "1–2 sentences on what this unit covers"}}
+  ]
+}}
+Use 5–15 units. Keep titles concise."""
+
+    data = _parse_json(await _call_llm(prompt, max_tokens=2500))
+    units = [
+        {"title": str(u["title"]).strip()[:200], "overview": str(u.get("overview", "")).strip()}
+        for u in data.get("units", [])
+        if isinstance(u, dict) and str(u.get("title", "")).strip()
+    ]
+    if not units:
+        raise ValueError("model returned no units")
+    return {
+        "framework": str(data.get("framework") or "").strip()[:200] or None,
+        "source": "syllabus" if syllabus else "standards",
+        "units": units,
+    }
+
+
+async def generate_unit_details(
+    student: Student, subject: Subject, unit: CurriculumUnit, all_unit_titles: list[str]
+) -> dict:
+    """Return {"summary": str, "key_concepts": [{"name", "explanation"}], "formulas": [{"name", "expression", "explanation"}]}."""
+    if not _vertex_configured():
+        raise AIUnavailableError("Curriculum generation requires Vertex AI (Gemma 4) to be configured.")
+
+    outline = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(all_unit_titles))
+    prompt = f"""You are an expert teacher writing concise study notes for a student.
+
+{_curriculum_context(student, subject)}
+Curriculum: {subject.curriculum_framework or "not specified"}
+
+Full course outline (for context — cover ONLY the target unit, avoid repeating other units):
+{outline}
+
+Target unit: {unit.title}
+Unit overview: {unit.overview or "—"}
+
+Return ONLY a JSON object, no markdown, in exactly this shape:
+{{
+  "summary": "a clear 100–180 word summary of the unit at this grade level",
+  "key_concepts": [
+    {{"name": "concept", "explanation": "1–3 sentence student-friendly explanation"}}
+  ],
+  "formulas": [
+    {{"name": "formula name", "expression": "the formula", "explanation": "what each symbol means / when to use it"}}
+  ]
+}}
+Rules:
+- 4–8 key concepts, the most important ones for tests.
+- Formulas: include every important formula, equation, rule or law for this unit. Write expressions in plain
+  text with Unicode symbols (e.g. "x = (−b ± √(b² − 4ac)) / 2a", "a² + b² = c²") — no LaTeX.
+- If the subject has no formulas (e.g. history, literature), return "formulas": [].
+- Pitch everything at the student's grade level."""
+
+    data = _parse_json(await _call_llm(prompt, max_tokens=3000))
+    summary = str(data.get("summary") or "").strip()
+    if not summary:
+        raise ValueError("model returned no summary")
+    return {
+        "summary": summary,
+        "key_concepts": [
+            {"name": str(c.get("name", "")).strip(), "explanation": str(c.get("explanation", "")).strip()}
+            for c in data.get("key_concepts", []) if isinstance(c, dict) and c.get("name")
+        ],
+        "formulas": [
+            {"name": str(f.get("name", "")).strip(), "expression": str(f.get("expression", "")).strip(),
+             "explanation": str(f.get("explanation", "")).strip()}
+            for f in data.get("formulas", []) if isinstance(f, dict) and f.get("expression")
+        ],
+    }

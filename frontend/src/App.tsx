@@ -6,6 +6,7 @@ import { ProfilePage } from "./pages/ProfilePage";
 import { ActivitiesPage } from "./pages/ActivitiesPage";
 import { SchedulePage } from "./pages/SchedulePage";
 import { StudyPlannerPage } from "./pages/StudyPlannerPage";
+import { SubjectPage } from "./pages/SubjectPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 const App: React.FC = () => (
@@ -17,6 +18,7 @@ const App: React.FC = () => (
         <Route path="/activities" element={<ActivitiesPage />} />
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/study-planner" element={<StudyPlannerPage />} />
+        <Route path="/study-planner/subjects/:subjectId" element={<SubjectPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>

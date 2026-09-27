@@ -55,3 +55,7 @@ Thumbs.db
 # ======================
 *.log
 .cache/
+
+# Google Cloud service-account keys
+gcp-key.json
+*-key.json

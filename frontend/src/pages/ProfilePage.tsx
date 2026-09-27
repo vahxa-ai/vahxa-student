@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Edit2, GraduationCap, School } from "lucide-react";
+import { Edit2, GraduationCap, MapPin, School } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { studentApi } from "../services/api";
 import { ProfileForm } from "../components/profile/ProfileForm";
@@ -54,6 +54,12 @@ export const ProfilePage: React.FC = () => {
               {student.school && (
                 <p className="text-sm text-gray-600 flex items-center gap-1.5">
                   <School size={14} className="text-indigo-500" /> {student.school}
+                </p>
+              )}
+              {(student.county || student.state || student.country) && (
+                <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                  <MapPin size={14} className="text-indigo-500" />
+                  {[student.county, student.state, student.country].filter(Boolean).join(", ")}
                 </p>
               )}
             </div>

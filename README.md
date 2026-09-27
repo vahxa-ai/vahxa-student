@@ -25,7 +25,8 @@ graph TB
             R1["/student"]
             R2["/activities"]
             R3["/subjects"]
-            R4["/deadlines"]
+            R4["/deadlines
+/subjects/{id}/curriculum"]
             R5["/schedule"]
         end
 
@@ -40,7 +41,7 @@ graph TB
     end
 
     subgraph Data["🗄️ Data Layer"]
-        DB[("SQLite\nstudent_aid.db\n─────────────\nstudent\nactivities\nsubjects\ndeadlines")]
+        DB[("SQLite\nstudent_aid.db\n─────────────\nstudent\nactivities\nsubjects\ncurriculum_units\ndeadlines")]
     end
 
     subgraph External["☁️ External Services"]
@@ -103,7 +104,16 @@ erDiagram
         bool completed
     }
 
+    CURRICULUM_UNIT {
+        int id PK
+        int subject_id FK
+        int position
+        string title
+        text details_json
+    }
+
     SUBJECT ||--o{ DEADLINE : "has"
+    SUBJECT ||--o{ CURRICULUM_UNIT : "organized into"
 ```
 
 ---
@@ -112,10 +122,11 @@ erDiagram
 
 | Feature | Description |
 |---------|-------------|
-| 🎓 **Student Profile** | Name, age, school and grade — set once on first launch, used to personalise every plan |
+| 🎓 **Student Profile** | Name, age, school, grade and location — set once on first launch, used to personalise every plan |
 | 🕒 **Daily Routine** | Morning / school / after-school / evening timeframes the AI builds plans around |
 | 📋 **Activity Tracking** | School, sports, medical and hobby activities with recurrence; one-time **special events** highlighted |
 | 📚 **Academic Tracker** | Subjects (difficulty, homework frequency, exam dates) and deadlines with AI-generated reminder plans |
+| 🧭 **Subject Curriculum** | Click a subject to load its units/chapters — inferred from your grade and county/state/country standards, or from a pasted syllabus — with AI summaries, key concepts and formulas per unit |
 | 🤖 **AI Schedule** | Gemma 4 builds a 1-day, multi-day or weekly plan with study sessions, relax time and conflict detection |
 
 ---
@@ -189,7 +200,7 @@ pip install asyncpg
 student_aid/
 ├── backend/
 │   ├── app/
-│   │   ├── api/routes/        # student · activities · subjects · deadlines · schedule
+│   │   ├── api/routes/        # student · activities · subjects · curriculum · deadlines · schedule
 │   │   ├── models/models.py   # SQLAlchemy ORM models
 │   │   ├── schemas/schemas.py # Pydantic request/response schemas
 │   │   ├── services/
@@ -201,7 +212,7 @@ student_aid/
 │   └── .env.example
 └── frontend/
     └── src/
-        ├── pages/             # Dashboard · Activities · StudyPlanner (Academic Tracker)
+        ├── pages/             # Dashboard · Activities · StudyPlanner (Academic Tracker) · Subject
         │                      # Schedule · Profile · Settings
         ├── components/
         │   ├── layout/        # Sidebar · Layout (loads profile, onboarding)

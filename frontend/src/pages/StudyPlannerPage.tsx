@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   GraduationCap, Sparkles, Loader2, BookOpen,
   Pencil, Trash2, Check, Plus, X, Bell, Calendar,
-  AlertTriangle, Clock, ChevronDown,
+  AlertTriangle, Clock, ChevronDown, ChevronRight,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -243,10 +244,10 @@ export const StudyPlannerPage: React.FC = () => {
           {subjects.length > 0 ? (
             <div className="space-y-2 mb-3">
               {subjects.map((sub) => (
-                <div key={sub.id} className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2.5">
-                  <div className="flex-1 min-w-0">
+                <div key={sub.id} className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2.5 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
+                  <Link to={`/study-planner/subjects/${sub.id}`} className="flex-1 min-w-0 group" title="View curriculum">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-gray-800">{sub.name}</span>
+                      <span className="text-sm font-medium text-gray-800 group-hover:text-indigo-700">{sub.name}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${DIFFICULTY_COLORS[sub.difficulty]}`}>
                         {DIFFICULTY_LABELS[sub.difficulty]}
                       </span>
@@ -257,7 +258,10 @@ export const StudyPlannerPage: React.FC = () => {
                       {sub.exam_date && <span className="text-xs text-red-600 font-medium">Exam: {sub.exam_date}</span>}
                     </div>
                     {sub.teacher && <p className="text-xs text-gray-400 mt-0.5">Teacher: {sub.teacher}</p>}
-                  </div>
+                    <p className="text-xs text-indigo-500 mt-1 flex items-center gap-0.5 opacity-70 group-hover:opacity-100">
+                      {sub.curriculum_generated_at ? "View curriculum & notes" : "Load curriculum"} <ChevronRight size={12} />
+                    </p>
+                  </Link>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => startSubjectEdit(sub)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={13} /></button>
                     <button onClick={() => handleDeleteSubject(sub.id)} disabled={deletingSubjectId === sub.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40">
