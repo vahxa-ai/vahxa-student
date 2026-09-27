@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   GraduationCap, Sparkles, Loader2, BookOpen,
   Pencil, Trash2, Check, Plus, X, Bell, Calendar,
-  AlertTriangle, Clock, ChevronDown,
+  AlertTriangle, Clock, ChevronDown, ChevronRight,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -66,10 +67,7 @@ const BLANK_DEADLINE = () => ({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const StudyPlannerPage: React.FC = () => {
-  const { members } = useAppStore();
-  const students = members.filter((m) => m.role === "student");
-
-  const [activeStudentId, setActiveStudentId] = useState<number | null>(null);
+  const { student } = useAppStore();
 
   // subjects
   const [subjects, setSubjects]               = useState<Subject[]>([]);
@@ -95,19 +93,10 @@ export const StudyPlannerPage: React.FC = () => {
   const remindersRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (students.length > 0 && !activeStudentId) setActiveStudentId(students[0].id);
-  }, [members]); // eslint-disable-line
+    subjectApi.list().then(setSubjects);
+    deadlineApi.list().then(setDeadlines);
+  }, []);
 
-  useEffect(() => {
-    if (!activeStudentId) return;
-    subjectApi.list(activeStudentId).then(setSubjects);
-    deadlineApi.list(activeStudentId).then(setDeadlines);
-    setReminders(null);
-    cancelSubjectEdit();
-    cancelDeadlineEdit();
-  }, [activeStudentId]); // eslint-disable-line
-
-  const activeStudent = students.find((s) => s.id === activeStudentId);
   const today = new Date(); today.setHours(0,0,0,0);
 
   // ── Subjects CRUD ─────────────────────────────────────────────────────────
@@ -127,7 +116,7 @@ export const StudyPlannerPage: React.FC = () => {
   };
   const handleSaveSubject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeStudentId || !subjectForm.name.trim()) return;
+    if (!subjectForm.name.trim()) return;
     setSavingSubject(true);
     try {
       const payload = {
@@ -136,19 +125,18 @@ export const StudyPlannerPage: React.FC = () => {
         exam_date: subjectForm.exam_date || null, notes: subjectForm.notes || null,
       };
       if (editingSubjectId !== null) {
-        const updated = await subjectApi.update(activeStudentId, editingSubjectId, payload);
+        const updated = await subjectApi.update(editingSubjectId, payload);
         setSubjects((prev) => prev.map((s) => s.id === editingSubjectId ? updated : s));
       } else {
-        const created = await subjectApi.create(activeStudentId, payload as Partial<Subject> & { name: string });
+        const created = await subjectApi.create(payload as Partial<Subject> & { name: string });
         setSubjects((prev) => [...prev, created]);
       }
       cancelSubjectEdit();
     } finally { setSavingSubject(false); }
   };
   const handleDeleteSubject = async (id: number) => {
-    if (!activeStudentId) return;
     setDeletingSubjectId(id);
-    try { await subjectApi.delete(activeStudentId, id); setSubjects((prev) => prev.filter((s) => s.id !== id)); }
+    try { await subjectApi.delete(id); setSubjects((prev) => prev.filter((s) => s.id !== id)); }
     finally { setDeletingSubjectId(null); }
   };
 
@@ -168,7 +156,7 @@ export const StudyPlannerPage: React.FC = () => {
   };
   const handleSaveDeadline = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeStudentId || !deadlineForm.title.trim() || !deadlineForm.due_date) return;
+    if (!deadlineForm.title.trim() || !deadlineForm.due_date) return;
     setSavingDeadline(true);
     try {
       const payload = {
@@ -179,26 +167,24 @@ export const StudyPlannerPage: React.FC = () => {
         description: deadlineForm.description || null,
       };
       if (editingDeadlineId !== null) {
-        const updated = await deadlineApi.update(activeStudentId, editingDeadlineId, payload);
+        const updated = await deadlineApi.update(editingDeadlineId, payload);
         setDeadlines((prev) => prev.map((d) => d.id === editingDeadlineId ? updated : d));
       } else {
-        const created = await deadlineApi.create(activeStudentId, payload as any);
+        const created = await deadlineApi.create(payload as any);
         setDeadlines((prev) => [...prev, created].sort((a, b) => a.due_date.localeCompare(b.due_date)));
       }
       cancelDeadlineEdit();
     } finally { setSavingDeadline(false); }
   };
   const handleDeleteDeadline = async (id: number) => {
-    if (!activeStudentId) return;
     setDeletingDeadlineId(id);
-    try { await deadlineApi.delete(activeStudentId, id); setDeadlines((prev) => prev.filter((d) => d.id !== id)); }
+    try { await deadlineApi.delete(id); setDeadlines((prev) => prev.filter((d) => d.id !== id)); }
     finally { setDeletingDeadlineId(null); }
   };
   const toggleComplete = async (dl: Deadline) => {
-    if (!activeStudentId) return;
     setTogglingId(dl.id);
     try {
-      const updated = await deadlineApi.update(activeStudentId, dl.id, { completed: !dl.completed });
+      const updated = await deadlineApi.update(dl.id, { completed: !dl.completed });
       setDeadlines((prev) => prev.map((d) => d.id === dl.id ? updated : d));
     } finally { setTogglingId(null); }
   };
@@ -206,33 +192,22 @@ export const StudyPlannerPage: React.FC = () => {
   // ── Reminder generation ────────────────────────────────────────────────────
 
   const handleGenerateReminders = async () => {
-    if (!activeStudentId) return;
     setGeneratingReminders(true);
     setReminders(null);
     try {
-      const { content } = await deadlineApi.generateReminders(activeStudentId);
+      const { content } = await deadlineApi.generateReminders();
       setReminders(content);
       setShowReminders(true);
       setTimeout(() => remindersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } finally { setGeneratingReminders(false); }
   };
 
-  if (students.length === 0) {
-    return (
-      <div className="p-8 text-center text-gray-400">
-        <GraduationCap size={40} className="mx-auto mb-3 opacity-40" />
-        <p className="text-lg font-medium text-gray-500 mb-1">No students in the family</p>
-        <p className="text-sm">Add a family member with the "student" role to use the study planner.</p>
-      </div>
-    );
-  }
-
   const fieldCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const openDeadlines  = deadlines.filter((d) => !d.completed);
   const doneDeadlines  = deadlines.filter((d) => d.completed);
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
@@ -245,35 +220,13 @@ export const StudyPlannerPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Student tabs */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {students.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setActiveStudentId(s.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-              activeStudentId === s.id
-                ? "text-white border-transparent shadow-md"
-                : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"
-            }`}
-            style={activeStudentId === s.id ? { background: s.color } : undefined}
-          >
-            <div className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold"
-              style={{ backgroundColor: activeStudentId === s.id ? "rgba(255,255,255,0.3)" : s.color }}>
-              {s.avatar_initials[0]}
-            </div>
-            {s.name}
-          </button>
-        ))}
-      </div>
-
       {/* ── Subjects ──────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-5">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookOpen size={15} className="text-indigo-500" />
             <h2 className="text-sm font-semibold text-gray-700">
-              Subjects{activeStudent ? ` — ${activeStudent.name}` : ""}
+              Subjects
             </h2>
             {subjects.length > 0 && (
               <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">{subjects.length}</span>
@@ -291,10 +244,10 @@ export const StudyPlannerPage: React.FC = () => {
           {subjects.length > 0 ? (
             <div className="space-y-2 mb-3">
               {subjects.map((sub) => (
-                <div key={sub.id} className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2.5">
-                  <div className="flex-1 min-w-0">
+                <div key={sub.id} className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2.5 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
+                  <Link to={`/study-planner/subjects/${sub.id}`} className="flex-1 min-w-0 group" title="View curriculum">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-gray-800">{sub.name}</span>
+                      <span className="text-sm font-medium text-gray-800 group-hover:text-indigo-700">{sub.name}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${DIFFICULTY_COLORS[sub.difficulty]}`}>
                         {DIFFICULTY_LABELS[sub.difficulty]}
                       </span>
@@ -305,10 +258,13 @@ export const StudyPlannerPage: React.FC = () => {
                       {sub.exam_date && <span className="text-xs text-red-600 font-medium">Exam: {sub.exam_date}</span>}
                     </div>
                     {sub.teacher && <p className="text-xs text-gray-400 mt-0.5">Teacher: {sub.teacher}</p>}
-                  </div>
+                    <p className="text-xs text-indigo-500 mt-1 flex items-center gap-0.5 opacity-70 group-hover:opacity-100">
+                      {sub.curriculum_generated_at ? "View curriculum & notes" : "Load curriculum"} <ChevronRight size={12} />
+                    </p>
+                  </Link>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => startSubjectEdit(sub)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={13} /></button>
-                    <button onClick={() => handleDeleteSubject(sub.id)} disabled={deletingSubjectId === sub.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40">
+                    <button onClick={() => startSubjectEdit(sub)} aria-label={`Edit ${sub.name}`} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={13} /></button>
+                    <button onClick={() => handleDeleteSubject(sub.id)} aria-label={`Delete ${sub.name}`} disabled={deletingSubjectId === sub.id} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40">
                       {deletingSubjectId === sub.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                     </button>
                   </div>
@@ -388,7 +344,7 @@ export const StudyPlannerPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <Calendar size={15} className="text-violet-500" />
             <h2 className="text-sm font-semibold text-gray-700">
-              Deadlines{activeStudent ? ` — ${activeStudent.name}` : ""}
+              Deadlines
             </h2>
             {openDeadlines.length > 0 && (
               <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">{openDeadlines.length} open</span>
@@ -496,8 +452,8 @@ export const StudyPlannerPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => startDeadlineEdit(dl)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors"><Pencil size={13} /></button>
-                      <button onClick={() => handleDeleteDeadline(dl.id)} disabled={deletingDeadlineId === dl.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors disabled:opacity-40">
+                      <button onClick={() => startDeadlineEdit(dl)} aria-label={`Edit ${dl.title}`} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors"><Pencil size={13} /></button>
+                      <button onClick={() => handleDeleteDeadline(dl.id)} aria-label={`Delete ${dl.title}`} disabled={deletingDeadlineId === dl.id} className="p-2 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors disabled:opacity-40">
                         {deletingDeadlineId === dl.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                       </button>
                     </div>
@@ -523,7 +479,7 @@ export const StudyPlannerPage: React.FC = () => {
                       </button>
                       <span className="text-sm text-gray-500 line-through flex-1">{dl.title}</span>
                       <span className="text-xs text-gray-400">{typeInfo?.icon} {dl.due_date}</span>
-                      <button onClick={() => handleDeleteDeadline(dl.id)} className="p-1 text-gray-300 hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                      <button onClick={() => handleDeleteDeadline(dl.id)} aria-label={`Delete ${dl.title}`} className="p-2 text-gray-400 hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
                     </div>
                   );
                 })}
@@ -561,7 +517,7 @@ export const StudyPlannerPage: React.FC = () => {
           <div className="px-6 py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-violet-200">AI Reminder Plan</p>
-              <h2 className="text-base font-bold mt-0.5">{activeStudent?.name} — Upcoming Deadlines</h2>
+              <h2 className="text-base font-bold mt-0.5">{student?.name} — Upcoming Deadlines</h2>
             </div>
             <button onClick={() => setShowReminders(!showReminders)} className="text-white/70 hover:text-white">
               <ChevronDown size={18} className={`transition-transform ${showReminders ? "" : "rotate-180"}`} />

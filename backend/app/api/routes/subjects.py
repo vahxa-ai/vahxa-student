@@ -1,29 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
+from app.api.deps import get_approved_student
 from app.db.database import get_db
-from app.models.models import Subject, FamilyMember
+from app.models.models import Subject, Student, QuizAttempt, SampleTest, SampleTestAttempt, CurriculumUnit
 from app.schemas.schemas import SubjectCreate, SubjectUpdate, SubjectOut
 
-router = APIRouter(prefix="/members/{member_id}/subjects", tags=["subjects"])
+router = APIRouter(prefix="/subjects", tags=["subjects"])
 
 
-async def _get_member(member_id: int, db: AsyncSession) -> FamilyMember:
-    member = await db.get(FamilyMember, member_id)
-    if not member:
-        raise HTTPException(status_code=404, detail="Member not found")
-    return member
+async def own_subject(subject_id: int, student: Student, db: AsyncSession) -> Subject:
+    """A subject belonging to this student, else 404 (never reveal other students' subjects)."""
+    subject = await db.get(Subject, subject_id)
+    if not subject or subject.student_id != student.id:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return subject
 
 
 @router.post("", response_model=SubjectOut)
-async def create_subject(
-    member_id: int,
-    payload: SubjectCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    await _get_member(member_id, db)
-    subject = Subject(**payload.model_dump(), member_id=member_id)
+async def create_subject(payload: SubjectCreate, student: Student = Depends(get_approved_student),
+                         db: AsyncSession = Depends(get_db)):
+    subject = Subject(**payload.model_dump(), student_id=student.id)
     db.add(subject)
     await db.flush()
     await db.refresh(subject)
@@ -31,22 +29,25 @@ async def create_subject(
 
 
 @router.get("", response_model=list[SubjectOut])
-async def list_subjects(member_id: int, db: AsyncSession = Depends(get_db)):
-    await _get_member(member_id, db)
-    result = await db.execute(select(Subject).where(Subject.member_id == member_id))
+async def list_subjects(student: Student = Depends(get_approved_student), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Subject).where(Subject.student_id == student.id))
     return result.scalars().all()
+
+
+@router.get("/{subject_id}", response_model=SubjectOut)
+async def get_subject(subject_id: int, student: Student = Depends(get_approved_student),
+                      db: AsyncSession = Depends(get_db)):
+    return await own_subject(subject_id, student, db)
 
 
 @router.patch("/{subject_id}", response_model=SubjectOut)
 async def update_subject(
-    member_id: int,
     subject_id: int,
     payload: SubjectUpdate,
+    student: Student = Depends(get_approved_student),
     db: AsyncSession = Depends(get_db),
 ):
-    subject = await db.get(Subject, subject_id)
-    if not subject or subject.member_id != member_id:
-        raise HTTPException(status_code=404, detail="Subject not found")
+    subject = await own_subject(subject_id, student, db)
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(subject, k, v)
     await db.flush()
@@ -55,8 +56,12 @@ async def update_subject(
 
 
 @router.delete("/{subject_id}", status_code=204)
-async def delete_subject(member_id: int, subject_id: int, db: AsyncSession = Depends(get_db)):
-    subject = await db.get(Subject, subject_id)
-    if not subject or subject.member_id != member_id:
-        raise HTTPException(status_code=404, detail="Subject not found")
+async def delete_subject(subject_id: int, student: Student = Depends(get_approved_student),
+                         db: AsyncSession = Depends(get_db)):
+    subject = await own_subject(subject_id, student, db)
+    # Quiz history goes with the subject (explicit so it also holds where the DB doesn't enforce FK cascades)
+    await db.execute(delete(QuizAttempt).where(QuizAttempt.subject_id == subject.id))
+    await db.execute(delete(SampleTestAttempt).where(SampleTestAttempt.subject_id == subject.id))
+    await db.execute(delete(SampleTest).where(
+        SampleTest.unit_id.in_(select(CurriculumUnit.id).where(CurriculumUnit.subject_id == subject.id))))
     await db.delete(subject)

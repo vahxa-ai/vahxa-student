@@ -1,0 +1,22 @@
+# Never ship secrets or local data in the image
+**/.env
+**/.env.*
+!**/.env.example
+**/*-key.json
+**/gcp-key.json
+**/*.db
+**/*.db.bak
+**/*.db-journal
+
+# Build output / dependencies (rebuilt inside the image)
+**/node_modules
+frontend/build
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+
+# Tooling
+.git
+.idea
+.vscode

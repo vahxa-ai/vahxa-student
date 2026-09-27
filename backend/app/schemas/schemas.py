@@ -1,59 +1,67 @@
 from datetime import datetime, date, time
-from typing import Optional, List
+from typing import Optional, Union
 from pydantic import BaseModel, Field
-from app.models.models import MemberRole, ActivityType, RecurrenceType, SubjectDifficulty, HomeworkFrequency
+import re
+
+from pydantic import field_validator
+
+from app.models.models import (
+    ActivityType, RecurrenceType, SubjectDifficulty, HomeworkFrequency, DeadlineType,
+    StudentStatus, ConsentStatus,
+)
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-# --- Family ---
+def _clean_email(value: str) -> str:
+    value = (value or "").strip().lower()
+    if not _EMAIL_RE.match(value) or len(value) > 320:
+        raise ValueError("Enter a valid email address")
+    return value
 
-class FamilyCreate(BaseModel):
+
+# --- Student profile ---
+
+class StudentUpsert(BaseModel):
     name: str
+    age: Optional[int] = None
+    school: Optional[str] = None
+    grade: Optional[str] = None
+    county: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
     timezone: str = "America/New_York"
-
-
-class FamilyOut(BaseModel):
-    id: int
-    name: str
-    timezone: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-# --- Family Member ---
-
-class FamilyMemberCreate(BaseModel):
-    name: str
-    role: MemberRole = MemberRole.parent
-    age: Optional[int] = None
-    school: Optional[str] = None
-    grade: Optional[str] = None
-    color: str = "#4F46E5"
     default_prompt: Optional[str] = None
 
 
-class FamilyMemberUpdate(BaseModel):
+class StudentUpdate(BaseModel):
     name: Optional[str] = None
-    role: Optional[MemberRole] = None
     age: Optional[int] = None
     school: Optional[str] = None
     grade: Optional[str] = None
-    color: Optional[str] = None
+    county: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    timezone: Optional[str] = None
     default_prompt: Optional[str] = None
 
 
-class FamilyMemberOut(BaseModel):
+class StudentOut(BaseModel):
     id: int
-    family_id: int
+    status: Optional[StudentStatus] = None
+    status_note: Optional[str] = None
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None
     name: str
-    role: MemberRole
     age: Optional[int]
     school: Optional[str]
     grade: Optional[str]
-    color: str
-    avatar_initials: str
+    county: Optional[str]
+    state: Optional[str]
+    country: Optional[str]
+    timezone: str
     default_prompt: Optional[str]
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -91,7 +99,6 @@ class ActivityUpdate(BaseModel):
 
 class ActivityOut(BaseModel):
     id: int
-    member_id: int
     title: str
     activity_type: ActivityType
     description: Optional[str]
@@ -103,7 +110,6 @@ class ActivityOut(BaseModel):
     recurrence: RecurrenceType
     recurrence_days: Optional[str]
     is_special: bool
-    synced_to_calendar: bool
 
     class Config:
         from_attributes = True
@@ -120,6 +126,7 @@ class SubjectCreate(BaseModel):
     class_days: Optional[str] = None      # "Mon,Wed,Fri"
     exam_date: Optional[date] = None
     notes: Optional[str] = None
+    syllabus_text: Optional[str] = None
 
 
 class SubjectUpdate(BaseModel):
@@ -131,11 +138,11 @@ class SubjectUpdate(BaseModel):
     class_days: Optional[str] = None
     exam_date: Optional[date] = None
     notes: Optional[str] = None
+    syllabus_text: Optional[str] = None
 
 
 class SubjectOut(BaseModel):
     id: int
-    member_id: int
     name: str
     teacher: Optional[str]
     difficulty: SubjectDifficulty
@@ -144,127 +151,86 @@ class SubjectOut(BaseModel):
     class_days: Optional[str]
     exam_date: Optional[date]
     notes: Optional[str]
+    syllabus_text: Optional[str]
+    curriculum_framework: Optional[str]
+    curriculum_source: Optional[str]
+    curriculum_generated_at: Optional[datetime]
 
     class Config:
         from_attributes = True
 
 
-# --- Study Plan ---
+# --- Curriculum ---
 
-class StudyPlanRequest(BaseModel):
-    member_id: int
-    week_start: date                       # Monday of the target week
-    relax_time_per_day_minutes: int = 60   # protected free time each day
-    additional_notes: Optional[str] = None
+class KeyConcept(BaseModel):
+    name: str
+    explanation: str
 
 
-class StudyPlanOut(BaseModel):
+class Formula(BaseModel):
+    name: str
+    expression: str
+    explanation: str = ""
+
+
+class UnitDetails(BaseModel):
+    summary: str
+    key_concepts: list[KeyConcept] = []
+    formulas: list[Formula] = []
+
+
+class PracticeQuestion(BaseModel):
+    question: str
+    answer: str                      # short final answer
+    explanation: str = ""            # step-by-step worked solution
+    difficulty: str = "medium"       # easy | medium | hard
+
+
+class CurriculumUnitOut(BaseModel):
     id: int
-    member_id: int
-    week_start: date
-    content: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-# --- Schedule Generation ---
-
-class ScheduleGenerateRequest(BaseModel):
-    family_id: int
-    schedule_date: date
-    schedule_end_date: Optional[date] = None   # None = same day only
-    start_time: Optional[time] = None
-    end_time: Optional[time] = None
-    location: Optional[str] = None
-    member_id: Optional[int] = None            # None = family-wide schedule
-    additional_notes: Optional[str] = None
-    custom_prompt: Optional[str] = None        # User's daily routine / preferences for LLM
+    position: int
+    title: str
+    overview: Optional[str]
+    details: Optional[UnitDetails]
+    details_generated_at: Optional[datetime]
+    practice: Optional[list[PracticeQuestion]] = None
+    practice_generated_at: Optional[datetime] = None
+    quiz_size: Optional[int] = None                  # questions in the unit's quiz bank (answers never sent here)
+    quiz_generated_at: Optional[datetime] = None
+    from_library: bool = False       # served from the shared library on this request
 
 
-class ScheduleOut(BaseModel):
-    id: int
-    family_id: int
-    member_id: Optional[int]
-    schedule_date: date
-    schedule_end_date: Optional[date]
-    schedule_start_time: Optional[time]
-    schedule_end_time: Optional[time]
-    location: Optional[str]
-    is_family_wide: bool
-    content: str
-    custom_prompt: Optional[str]
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+class CurriculumOut(BaseModel):
+    subject_id: int
+    framework: Optional[str]
+    source: Optional[str]            # "syllabus" | "standards"
+    generated_at: Optional[datetime]
+    shared: bool = False             # linked to the shared library for this student's category
+    from_library: bool = False       # loaded from the shared library on this request (no AI call)
+    units: list[CurriculumUnitOut]
 
 
-# --- Unified Planner ---
+# --- Planner ---
 
-class UnifiedPlanRequest(BaseModel):
-    family_id: int
+class PlanRequest(BaseModel):
     start_date: date
     end_date: Optional[date] = None          # None = single day
     start_time: Optional[time] = None
     end_time: Optional[time] = None
     location: Optional[str] = None
-    member_id: Optional[int] = None          # None = whole family
     relax_time_per_day_minutes: int = 60
     include_study_sessions: bool = True
     custom_prompt: Optional[str] = None
     additional_notes: Optional[str] = None
 
 
-class UnifiedPlanOut(BaseModel):
+class PlanOut(BaseModel):
     content: str
     start_date: date
     end_date: Optional[date]
-    family_id: int
-
-
-# --- Reports ---
-
-class ReportType(str):
-    daily = "daily"
-    weekly = "weekly"
-
-
-class ReportRequest(BaseModel):
-    family_id: int
-    report_date: date                          # anchor date (day for daily, week start for weekly)
-    report_type: str = "daily"                 # "daily" | "weekly"
-    member_id: Optional[int] = None
-
-
-class ReportOut(BaseModel):
-    report_type: str
-    report_date: date
-    family_id: int
-    member_id: Optional[int]
-    content: str                               # AI-generated markdown report
-
-
-# --- Calendar Sync ---
-
-class CalendarSyncRequest(BaseModel):
-    family_id: int
-    member_id: Optional[int] = None
-
-
-class CalendarEventOut(BaseModel):
-    id: str
-    summary: str
-    start: str
-    end: str
-    description: Optional[str] = None
-    location: Optional[str] = None
 
 
 # --- Deadlines ---
-
-from app.models.models import DeadlineType
 
 class DeadlineCreate(BaseModel):
     title:         str
@@ -285,7 +251,6 @@ class DeadlineUpdate(BaseModel):
 
 class DeadlineOut(BaseModel):
     id:            int
-    member_id:     int
     subject_id:    Optional[int]
     title:         str
     deadline_type: DeadlineType
@@ -298,100 +263,473 @@ class DeadlineOut(BaseModel):
         from_attributes = True
 
 
-# --- Pantry (inventory) ---
+# --- Accounts ---
 
-from datetime import time as _time   # aliased: "time" is used as a field name below
-from app.models.models import MealType
-
-
-class PantryItemCreate(BaseModel):
-    name: str
-    category: Optional[str] = None
-    quantity: float = 1
-    unit: str = ""
-    notes: Optional[str] = None
+class GoogleSignInRequest(BaseModel):
+    credential: str
 
 
-class PantryItemUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
-    quantity: Optional[float] = None
-    unit: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class PantryItemOut(BaseModel):
+class UserOut(BaseModel):
     id: int
-    family_id: int
+    email: str
+    name: Optional[str]
+    picture: Optional[str]
+    is_admin: bool = False
+
+
+class ConsentSummary(BaseModel):
+    status: ConsentStatus
+    parent_email: str
+    requested_at: datetime
+    last_sent_at: Optional[datetime]
+    expires_at: datetime
+    granted_at: Optional[datetime]
+
+
+class MeOut(BaseModel):
+    user: UserOut
+    student: Optional[StudentOut] = None
+    consent: Optional[ConsentSummary] = None        # latest consent request for this student
+    is_parent: bool = False                          # has granted/pending consents as a parent
+
+
+class AuthConfigOut(BaseModel):
+    google_client_id: str
+    consent_version: str
+
+
+class OnboardingRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    age: Optional[int] = Field(default=None, ge=3, le=25)
+    school: Optional[str] = Field(default=None, max_length=200)
+    grade: Optional[str] = Field(default=None, max_length=20)
+    county: Optional[str] = Field(default=None, max_length=100)
+    state: Optional[str] = Field(default=None, max_length=100)
+    country: Optional[str] = Field(default=None, max_length=100)
+    timezone: str = "America/New_York"
+    parent_name: str = Field(min_length=1, max_length=200)
+    parent_email: str
+
+    @field_validator("parent_email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _clean_email(v)
+
+
+class ParentContactUpdate(BaseModel):
+    parent_name: str = Field(min_length=1, max_length=200)
+    parent_email: str
+
+    @field_validator("parent_email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _clean_email(v)
+
+
+# --- Parental consent ---
+
+class ConsentInfoOut(BaseModel):
+    """What a parent sees when opening a consent link."""
+    status: ConsentStatus
+    expired: bool
+    student_name: str
+    student_email: str
+    parent_email: str               # the Google account that must sign in to consent
+    consent_version: str
+
+
+class ConsentGrantRequest(BaseModel):
+    parent_full_name: str = Field(min_length=2, max_length=200)
+    relationship: str = Field(min_length=2, max_length=50)
+    agree: bool
+
+
+class ParentChildOut(BaseModel):
+    consent_id: int
+    student_name: str
+    student_email: str
+    consent_status: ConsentStatus
+    student_status: Optional[StudentStatus]
+    granted_at: Optional[datetime]
+    revoked_at: Optional[datetime]
+
+
+# --- Admin ---
+
+class AdminConsentOut(BaseModel):
+    status: ConsentStatus
+    parent_email: str
+    parent_full_name: Optional[str]
+    relationship: Optional[str]
+    consent_version: Optional[str]
+    requested_at: datetime
+    granted_at: Optional[datetime]
+    granted_ip: Optional[str]
+    revoked_at: Optional[datetime]
+
+
+class AdminStudentOut(BaseModel):
+    id: int
     name: str
-    category: Optional[str]
-    quantity: float
-    unit: str
+    email: Optional[str]
+    age: Optional[int]
+    grade: Optional[str]
+    school: Optional[str]
+    location: str
+    status: Optional[StudentStatus]
+    status_note: Optional[str]
+    status_changed_at: Optional[datetime]
+    created_at: datetime
+    parent_name: Optional[str]
+    parent_email: Optional[str]
+    consent: Optional[AdminConsentOut]
+
+
+class AdminActionRequest(BaseModel):
+    note: Optional[str] = Field(default=None, max_length=1000)
+
+
+# --- Quizzes & tests ---
+
+class QuizStartRequest(BaseModel):
+    kind: str = Field(pattern="^(quiz|test)$")
+    unit_id: Optional[int] = None                    # quiz: the unit
+    unit_ids: Optional[list[int]] = None             # test: units to include (None = all units)
+    count: int = Field(default=10, ge=5, le=50)
+    time_limit_minutes: Optional[int] = Field(default=None, ge=1, le=180)
+
+
+class AttemptQuestionOut(BaseModel):
+    index: int
+    question: str
+    options: list[str]
+    difficulty: str
+    unit_title: str
+    # Only present once revealed (quiz: after answering; test: after submitting)
+    your_answer: Optional[int] = None
+    correct_answer: Optional[int] = None
+    correct: Optional[bool] = None
+    explanation: Optional[str] = None
+
+
+class AttemptOut(BaseModel):
+    id: int
+    subject_id: int
+    kind: str
+    unit_ids: list[int]
+    total: int
+    score: Optional[int]
+    time_limit_minutes: Optional[int]
+    started_at: datetime
+    expires_at: Optional[datetime]
+    submitted_at: Optional[datetime]
+    timed_out: bool
+    questions: list[AttemptQuestionOut]
+
+
+class AnswerRequest(BaseModel):
+    index: int = Field(ge=0)
+    choice: int = Field(ge=0, le=3)
+
+
+class SubmitRequest(BaseModel):
+    answers: Optional[list[Optional[int]]] = None    # tests: one entry per question (null = unanswered)
+
+
+class AttemptSummaryOut(BaseModel):
+    id: int
+    kind: str
+    unit_ids: list[int]
+    unit_titles: list[str]
+    score: Optional[int]
+    total: int
+    percent: Optional[int]
+    started_at: datetime
+    submitted_at: Optional[datetime]
+    timed_out: bool
+
+
+# --- Sample tests (mock exam papers) ---
+
+class SampleTestSectionSummary(BaseModel):
+    title: str
+    type: str
+    questions: int
+    marks: int
+
+
+class SampleTestSummaryOut(BaseModel):
+    id: int
+    number: int
+    title: str
+    duration_minutes: int
+    total_marks: int
+    sections: list[SampleTestSectionSummary]
+    attempts: int = 0
+    best_percent: Optional[int] = None
+    in_progress_attempt_id: Optional[int] = None
+
+
+class SampleTestListOut(BaseModel):
+    tests: list[SampleTestSummaryOut]
+    can_generate: bool
+    limit: int
+
+
+class MarkingPoint(BaseModel):
+    point: str
+    marks: int
+
+
+class STQuestionOut(BaseModel):
+    id: str
+    type: str                                       # mcq | short | long
+    question: str
+    marks: int
+    options: Optional[list[str]] = None             # mcq only
+    your_answer: Optional[Union[int, str]] = None
+    # revealed after submitting
+    correct_answer: Optional[int] = None            # mcq
+    correct: Optional[bool] = None                  # mcq
+    explanation: Optional[str] = None               # mcq
+    model_answer: Optional[str] = None              # written
+    marking_points: Optional[list[MarkingPoint]] = None
+    awarded: Optional[int] = None                   # written: self-marked score
+
+
+class STSectionOut(BaseModel):
+    id: str
+    title: str
+    type: str
+    instructions: str
+    marks: int
+    questions: list[STQuestionOut]
+
+
+class SampleTestAttemptOut(BaseModel):
+    id: int
+    subject_id: int
+    unit_title: str
+    number: int
+    title: str
+    instructions: str
+    duration_minutes: int
+    total_marks: int
+    time_limit_minutes: Optional[int]
+    started_at: datetime
+    expires_at: Optional[datetime]
+    submitted_at: Optional[datetime]
+    marked_at: Optional[datetime]
+    timed_out: bool
+    mcq_score: Optional[int]
+    mcq_marks: int
+    written_score: Optional[int]
+    written_marks: int
+    total_score: Optional[int]                      # once written answers are self-marked
+    sections: list[STSectionOut]
+
+
+class SampleTestStartRequest(BaseModel):
+    timed: bool = False
+
+
+class SampleTestSubmitRequest(BaseModel):
+    answers: dict[str, Optional[Union[int, str]]] = {}
+
+
+class SelfMarkRequest(BaseModel):
+    marks: dict[str, int]
+
+
+# --- College prep ---
+
+class AthleticsPrefs(BaseModel):
+    sport: Optional[str] = Field(default=None, max_length=100)
+    team: Optional[str] = Field(default=None, pattern="^(mens|womens|coed)$")   # performance standards differ
+    position_or_event: Optional[str] = Field(default=None, max_length=100)
+    level: Optional[str] = Field(default=None, max_length=100)          # e.g. varsity starter, club, state-ranked
+    stats: Optional[str] = Field(default=None, max_length=500)          # times, stats, honors
+    wants_to_compete: bool = False
+
+
+class CollegePreferences(BaseModel):
+    regions: Optional[str] = Field(default=None, max_length=200)        # e.g. "Texas, Northeast", "anywhere"
+    size: Optional[str] = Field(default=None, pattern="^(small|medium|large|any)$")
+    setting: Optional[str] = Field(default=None, pattern="^(urban|suburban|rural|any)$")
+    need_aid: Optional[str] = Field(default=None, pattern="^(yes|maybe|no)$")
+    budget_note: Optional[str] = Field(default=None, max_length=300)
+    priorities: list[str] = Field(default=[], max_length=5)             # academics | aid | athletics | location | size
+    athletics: Optional[AthleticsPrefs] = None
+
+
+class CollegeProfileIn(BaseModel):
+    intended_majors: Optional[str] = Field(default=None, max_length=300)
+    interests: Optional[str] = Field(default=None, max_length=2000)
+    career_goals: Optional[str] = Field(default=None, max_length=2000)
+    gpa: Optional[str] = Field(default=None, max_length=40)
+    test_scores: Optional[str] = Field(default=None, max_length=300)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+    preferences: Optional[CollegePreferences] = None
+
+
+class CollegeProfileOut(CollegeProfileIn):
+    updated_at: Optional[datetime] = None
+
+
+class GuideChapter(BaseModel):
+    id: str
+    title: str
+    summary: str
+    body: str
+    key_takeaways: list[str]
+
+
+class FlowPhase(BaseModel):
+    id: str
+    label: str
+
+
+class FlowTrack(BaseModel):
+    id: str
+    label: str
+
+
+class FlowStep(BaseModel):
+    id: str
+    phase: str
+    track: str
+    title: str
+    detail: str = ""
+    chapter: Optional[int] = None       # 1-based chapter number in the guide
+
+
+class AdmissionsFlow(BaseModel):
+    phases: list[FlowPhase]
+    tracks: list[FlowTrack]
+    steps: list[FlowStep]
+
+
+class AdmissionsGuideOut(BaseModel):
+    country: str
+    title: str
+    intro: str
+    chapters: list[GuideChapter]
+    flow: Optional[AdmissionsFlow] = None   # visual journey map
+    generated_at: datetime
+
+
+class RoadmapMilestone(BaseModel):
+    id: str
+    title: str
+    detail: str
+    category: str
+    completed_at: Optional[datetime] = None
+
+
+class RoadmapStage(BaseModel):
+    id: str
+    label: str
+    focus: str
+    goals: list[str]
+    milestones: list[RoadmapMilestone]
+
+
+class RoadmapOut(BaseModel):
+    overview: str
+    stages: list[RoadmapStage]
+    generated_at: datetime
+    completed: int
+    total: int
+
+
+class MilestoneUpdate(BaseModel):
+    completed: bool
+
+
+class CollegeSummary(BaseModel):
+    recognized: bool
+    official_name: str = ""
+    location: str = ""
+    type: str = ""
+    overview: str = ""
+    what_they_look_for: list[str] = []
+    typical_requirements: list[str] = []
+    testing_policy: str = ""
+    application_options: str = ""
+    selectivity: str = ""
+    fit_for_student: str = ""
+    next_steps: list[str] = []
+
+
+class CollegeEntryIn(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    category: str = Field(default="undecided", pattern="^(reach|target|likely|undecided)$")
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CollegeEntryUpdate(BaseModel):
+    category: Optional[str] = Field(default=None, pattern="^(reach|target|likely|undecided)$")
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CollegeEntryOut(BaseModel):
+    id: int
+    name: str
+    category: str
     notes: Optional[str]
+    summary: Optional[CollegeSummary]
+    summary_generated_at: Optional[datetime]
+    created_at: datetime
+
+
+class AchievementIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    category: str = Field(default="extracurricular",
+                          pattern="^(extracurricular|leadership|award|volunteer|work|summer|research|arts|athletics|other)$")
+    organization: Optional[str] = Field(default=None, max_length=200)
+    role: Optional[str] = Field(default=None, max_length=200)
+    grades: Optional[str] = Field(default=None, max_length=40)
+    hours_per_week: Optional[float] = Field(default=None, ge=0, le=100)
+    weeks_per_year: Optional[int] = Field(default=None, ge=0, le=52)
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+
+class AchievementOut(AchievementIn):
+    id: int
     created_at: datetime
 
     class Config:
         from_attributes = True
 
 
-# --- Weekly Meal Plan ---
-
-class MealSlotOut(BaseModel):
-    id: int
-    family_id: int
-    meal_type: MealType
-    time: _time
-    sort_order: int
-
-    class Config:
-        from_attributes = True
-
-
-class MealSlotUpdate(BaseModel):
-    time: _time
-
-
-class MealPlanItemCreate(BaseModel):
-    meal_type: MealType
-    day_of_week: int = Field(ge=0, le=6)
+class RecommendedCollege(BaseModel):
     name: str
-    pantry_item_id: Optional[int] = None
-    member_id: Optional[int] = None    # None = whole family
-    time: Optional[_time] = None
-    quantity: Optional[str] = None
-    notes: Optional[str] = None
-    sort_order: int = 0
+    location: str = ""
+    fit_category: str = "target"             # reach | target | likely
+    why: str = ""
+    division: str = ""                       # athletics lens: e.g. "NCAA Division III"
+    athletics_note: str = ""
+    aid_note: str = ""
+    academic_note: str = ""
 
 
-class MealPlanItemUpdate(BaseModel):
-    meal_type: Optional[MealType] = None
-    day_of_week: Optional[int] = Field(default=None, ge=0, le=6)
-    name: Optional[str] = None
-    pantry_item_id: Optional[int] = None
-    member_id: Optional[int] = None
-    time: Optional[_time] = None
-    quantity: Optional[str] = None
-    notes: Optional[str] = None
-    sort_order: Optional[int] = None
+class RecommendationGroup(BaseModel):
+    key: str                                 # athletics | aid | academics
+    title: str
+    intro: str = ""
+    colleges: list[RecommendedCollege]
 
 
-class MealPlanItemOut(BaseModel):
-    id: int
-    family_id: int
-    meal_type: MealType
-    day_of_week: int
-    name: str
-    pantry_item_id: Optional[int]
-    member_id: Optional[int]
-    time: Optional[_time]
-    quantity: Optional[str]
-    notes: Optional[str]
-    sort_order: int
-
-    class Config:
-        from_attributes = True
+class AthleticLevelFit(BaseModel):
+    division: str
+    fit: str                                 # strong | possible | stretch
+    why: str
 
 
-class MealPlanOut(BaseModel):
-    slots: List[MealSlotOut]
-    items: List[MealPlanItemOut]
+class RecommendationsOut(BaseModel):
+    summary: str
+    athletic_levels: list[AthleticLevelFit] = []
+    groups: list[RecommendationGroup]
+    next_steps: list[str] = []
+    removed_by_check: int = 0                # recommendations dropped by the fact-check
+    generated_at: datetime

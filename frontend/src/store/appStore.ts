@@ -1,31 +1,21 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import type { Family, FamilyMember } from "../types";
+import type { Me, Student } from "../types";
 
 interface AppState {
-  activeFamilyId: number | null;
-  families: Family[];
-  members: FamilyMember[];
-  setActiveFamilyId: (id: number | null) => void;
-  setFamilies: (families: Family[]) => void;
-  setMembers: (members: FamilyMember[]) => void;
-  activeFamily: () => Family | null;
+  /** Signed-in account (null = signed out). */
+  me: Me | null;
+  /** The signed-in student's profile — kept in sync with me.student. */
+  student: Student | null;
+  /** True once the session check has finished. */
+  loaded: boolean;
+  setMe: (me: Me | null) => void;
+  setStudent: (student: Student | null) => void;
 }
 
-export const useAppStore = create<AppState>()(
-  persist(
-    (set, get) => ({
-      activeFamilyId: null,
-      families: [],
-      members: [],
-      setActiveFamilyId: (id) => set({ activeFamilyId: id }),
-      setFamilies: (families) => set({ families }),
-      setMembers: (members) => set({ members }),
-      activeFamily: () => {
-        const { activeFamilyId, families } = get();
-        return families.find((f) => f.id === activeFamilyId) ?? null;
-      },
-    }),
-    { name: "family-aid-store" }
-  )
-);
+export const useAppStore = create<AppState>()((set) => ({
+  me: null,
+  student: null,
+  loaded: false,
+  setMe: (me) => set({ me, student: me?.student ?? null, loaded: true }),
+  setStudent: (student) => set((s) => ({ student, me: s.me && { ...s.me, student } })),
+}));

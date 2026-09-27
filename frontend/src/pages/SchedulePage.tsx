@@ -1,13 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
-  Sparkles, Loader2, ChevronDown, Users, BookOpen,
+  Sparkles, Loader2, ChevronDown, BookOpen,
   ToggleLeft, ToggleRight, Printer,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useAppStore } from "../store/appStore";
 import { scheduleApi } from "../services/api";
-import type { UnifiedPlan } from "../types";
+import type { Plan } from "../types";
 import { format, startOfWeek, endOfWeek, addDays } from "date-fns";
 
 type DayMode = "single" | "multi" | "week";
@@ -20,7 +19,7 @@ const MODE_CONFIG: { key: DayMode; label: string; desc: string }[] = [
 
 // ─── Plan viewer ──────────────────────────────────────────────────────────────
 
-const PlanViewer: React.FC<{ plan: UnifiedPlan; onPrint: () => void }> = ({ plan, onPrint }) => {
+const PlanViewer: React.FC<{ plan: Plan; onPrint: () => void }> = ({ plan, onPrint }) => {
   const startLabel = format(new Date(plan.start_date + "T00:00:00"), "MMMM d, yyyy");
   const endLabel =
     plan.end_date && plan.end_date !== plan.start_date
@@ -30,12 +29,12 @@ const PlanViewer: React.FC<{ plan: UnifiedPlan; onPrint: () => void }> = ({ plan
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-indigo-100 overflow-hidden print:shadow-none print:border-0">
       <div className="px-6 py-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-600 to-violet-700 text-white print:bg-none print:text-gray-900">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-indigo-200">AI Schedule</p>
             <h2 className="text-lg font-bold mt-0.5">{startLabel}{endLabel}</h2>
             <p className="text-xs text-indigo-300 mt-0.5 print:hidden">
-              Activities · daily templates · study sessions
+              Activities · daily routine · study sessions
             </p>
           </div>
           <button
@@ -56,33 +55,17 @@ const PlanViewer: React.FC<{ plan: UnifiedPlan; onPrint: () => void }> = ({ plan
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const SchedulePage: React.FC = () => {
-  const { activeFamilyId, members } = useAppStore();
-  const students = members.filter((m) => m.role === "student");
-  const hasStudents = students.length > 0;
-
   const [dayMode, setDayMode]         = useState<DayMode>("single");
   const [startDate, setStartDate]     = useState(format(new Date(), "yyyy-MM-dd"));
   const [endDate, setEndDate]         = useState("");
-  const [memberId, setMemberId]       = useState<string>("");
   const [notes, setNotes]             = useState("");
   const [includeStudy, setIncludeStudy] = useState(true);
   const [relaxMinutes, setRelaxMinutes] = useState("60");
   const [loading, setLoading]         = useState(false);
-  const [plan, setPlan]               = useState<UnifiedPlan | null>(null);
-  const [history, setHistory]         = useState<UnifiedPlan[]>([]);
+  const [plan, setPlan]               = useState<Plan | null>(null);
+  const [history, setHistory]         = useState<Plan[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const planRef = useRef<HTMLDivElement>(null);
-
-  // Disable study toggle when no students in scope
-  const studentsInScope = (() => {
-    if (!memberId) return hasStudents;
-    return !!members.find((m) => String(m.id) === memberId && m.role === "student");
-  })();
-
-  useEffect(() => {
-    if (!studentsInScope) setIncludeStudy(false);
-    else setIncludeStudy(true);
-  }, [studentsInScope]);
 
   const changeMode = (mode: DayMode) => {
     setDayMode(mode);
@@ -114,15 +97,12 @@ export const SchedulePage: React.FC = () => {
     endDate || undefined;
 
   const generate = async () => {
-    if (!activeFamilyId) return;
     setLoading(true);
     try {
-      const result = await scheduleApi.generateUnified({
-        family_id: activeFamilyId,
+      const result = await scheduleApi.generate({
         start_date: startDate,
         end_date: computedEnd,
-        member_id: memberId ? parseInt(memberId) : undefined,
-        include_study_sessions: includeStudy && studentsInScope,
+        include_study_sessions: includeStudy,
         relax_time_per_day_minutes: parseInt(relaxMinutes) || 60,
         additional_notes: notes || undefined,
       });
@@ -133,14 +113,6 @@ export const SchedulePage: React.FC = () => {
     }
   };
 
-  if (!activeFamilyId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Please create or select a family first.</p>
-      </div>
-    );
-  }
-
   const inputCls = "w-full border border-indigo-200 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white placeholder-gray-400";
   const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
@@ -148,10 +120,8 @@ export const SchedulePage: React.FC = () => {
     ? `${format(new Date(startDate + "T00:00:00"), "MMM d")} – ${format(new Date((computedEnd ?? startDate) + "T00:00:00"), "MMM d, yyyy")}`
     : null;
 
-  const selectedMember = members.find((m) => String(m.id) === memberId);
-
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-7">
@@ -161,7 +131,7 @@ export const SchedulePage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">AI Schedule</h1>
           <p className="text-gray-400 text-xs">
-            Daily templates · activities · study sessions · Powered by Llama 3.3-70b via Groq
+            Daily routine · activities · study sessions · Powered by Gemma 4 on Vertex AI
           </p>
         </div>
       </div>
@@ -199,7 +169,7 @@ export const SchedulePage: React.FC = () => {
             <input type="date" className={inputCls + " max-w-xs"} value={startDate} onChange={(e) => onStartDateChange(e.target.value)} />
           )}
           {dayMode === "multi" && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <input type="date" className={inputCls} value={startDate} onChange={(e) => onStartDateChange(e.target.value)} />
               <span className="text-gray-400 text-sm flex-shrink-0">to</span>
               <input type="date" min={startDate} className={inputCls} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
@@ -213,99 +183,42 @@ export const SchedulePage: React.FC = () => {
           )}
         </div>
 
-        {/* ── Step 3: Who ──────────────────────────────────── */}
-        <div>
-          <p className={labelCls}>Who</p>
-          <div className="flex flex-wrap gap-2">
+        {/* ── Study sessions ───────────────────────────────── */}
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <BookOpen size={15} className="text-violet-500 flex-shrink-0" />
+            <span className="text-sm font-semibold text-violet-800">Study Sessions</span>
             <button
               type="button"
-              onClick={() => setMemberId("")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-sm font-medium transition-all ${
-                memberId === ""
-                  ? "bg-gradient-to-r from-indigo-500 to-violet-500 text-white border-transparent shadow-md"
-                  : "bg-white text-gray-500 border-gray-200 hover:border-indigo-300"
-              }`}
+              onClick={() => setIncludeStudy(!includeStudy)}
+              className="flex items-center gap-1.5 text-sm text-violet-700 ml-1"
             >
-              <Users size={14} /> Whole Family
+              {includeStudy
+                ? <ToggleRight size={22} className="text-violet-600" />
+                : <ToggleLeft size={22} className="text-gray-400" />}
+              <span className={includeStudy ? "text-violet-700 font-medium" : "text-gray-500"}>
+                {includeStudy ? "Included" : "Excluded"}
+              </span>
             </button>
-            {members.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setMemberId(memberId === String(m.id) ? "" : String(m.id))}
-                className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-sm font-medium transition-all ${
-                  memberId === String(m.id)
-                    ? "text-white border-transparent shadow-md"
-                    : "bg-white text-gray-500 border-gray-200 hover:border-indigo-300"
-                }`}
-                style={memberId === String(m.id) ? { background: m.color } : undefined}
-              >
-                <div
-                  className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold flex-shrink-0"
-                  style={{ backgroundColor: memberId === String(m.id) ? "rgba(255,255,255,0.3)" : m.color }}
-                >
-                  {m.avatar_initials[0]}
-                </div>
-                {m.name}
-                {m.role === "student" && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${memberId === String(m.id) ? "bg-white/20" : "bg-violet-100 text-violet-600"}`}>
-                    student
-                  </span>
-                )}
-              </button>
-            ))}
+            {includeStudy && (
+              <div className="flex items-center gap-2 ml-auto">
+                <label className="text-xs text-violet-600 font-medium whitespace-nowrap">Relax / day</label>
+                <input
+                  type="number" min={0} max={180}
+                  className="w-16 border border-violet-300 rounded-xl px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
+                  value={relaxMinutes}
+                  onChange={(e) => setRelaxMinutes(e.target.value)}
+                />
+                <span className="text-xs text-violet-500">min</span>
+              </div>
+            )}
           </div>
-          {!memberId && (
-            <p className="text-xs text-gray-400 mt-1.5">
-              Common activities → 👨‍👩‍👧 Family · individual activities under each member
-            </p>
-          )}
-          {selectedMember && (
-            <p className="text-xs text-gray-400 mt-1.5">
-              Individual schedule for {selectedMember.name}
-              {selectedMember.role === "student" ? " — includes study sessions" : ""}
+          {includeStudy && (
+            <p className="text-xs text-violet-500 mt-1.5">
+              Study sessions are built from subjects in the Academic Tracker
             </p>
           )}
         </div>
-
-        {/* ── Step 4: Study sessions (students in scope) ───── */}
-        {studentsInScope && (
-          <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <BookOpen size={15} className="text-violet-500 flex-shrink-0" />
-              <span className="text-sm font-semibold text-violet-800">Study Sessions</span>
-              <button
-                type="button"
-                onClick={() => setIncludeStudy(!includeStudy)}
-                className="flex items-center gap-1.5 text-sm text-violet-700 ml-1"
-              >
-                {includeStudy
-                  ? <ToggleRight size={22} className="text-violet-600" />
-                  : <ToggleLeft size={22} className="text-gray-400" />}
-                <span className={includeStudy ? "text-violet-700 font-medium" : "text-gray-500"}>
-                  {includeStudy ? "Included" : "Excluded"}
-                </span>
-              </button>
-              {includeStudy && (
-                <div className="flex items-center gap-2 ml-auto">
-                  <label className="text-xs text-violet-600 font-medium whitespace-nowrap">Relax / day</label>
-                  <input
-                    type="number" min={0} max={180}
-                    className="w-16 border border-violet-300 rounded-xl px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
-                    value={relaxMinutes}
-                    onChange={(e) => setRelaxMinutes(e.target.value)}
-                  />
-                  <span className="text-xs text-violet-500">min</span>
-                </div>
-              )}
-            </div>
-            {includeStudy && (
-              <p className="text-xs text-violet-500 mt-1.5">
-                Study sessions are built from subjects in the Academic Tracker
-              </p>
-            )}
-          </div>
-        )}
 
         {/* ── Notes ────────────────────────────────────────── */}
         <div>
