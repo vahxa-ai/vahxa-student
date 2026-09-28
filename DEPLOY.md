@@ -1,7 +1,8 @@
 # Deploying to Google Cloud
 
 The app runs as **one Cloud Run service** that serves both the FastAPI API (`/api/...`) and the
-built React frontend, behind **Identity-Aware Proxy (IAP)** so only approved Google accounts can open it.
+built React frontend. The service is public; access is controlled by the app itself — Google sign-in,
+parental consent, and admin approval (see [Access control](#access-control)).
 
 | Piece | Resource (project `vahxa-student`, region `us-central1`) |
 |-------|------------------------------------------------------------|
@@ -11,8 +12,9 @@ built React frontend, behind **Identity-Aware Proxy (IAP)** so only approved Goo
 | DB connection | Secret Manager secret `database-url` → env `DATABASE_URL` |
 | AI | Vertex AI — Gemma 4 (`google/gemma-4-26b-a4b-it-maas`, location `global`) |
 | Curriculum library | Firestore `(default)` database (nam5), collection `curriculum_library` |
-| Identity | Service account `student-app@vahxa-student.iam.gserviceaccount.com` — roles: Vertex AI User, Cloud Datastore User, Cloud SQL Client, and Secret Accessor on `database-url` |
-| Access | IAP with a custom OAuth client (consent screen in *Testing*; users must be listed as test users) |
+| Identity | Service account `student-app@vahxa-student.iam.gserviceaccount.com` — roles: Vertex AI User, Cloud Datastore User, Cloud SQL Client, and Secret Accessor on `database-url`, `session-secret`, `smtp-password` |
+| Sign-in | Google Identity Services with OAuth client `GOOGLE_OAUTH_CLIENT_ID` (consent screen published) → httpOnly session cookie signed with secret `session-secret` |
+| Email | Gmail SMTP (`SMTP_USER`, app password in secret `smtp-password`) for parental-consent emails |
 
 No key file is used in Cloud Run — the service authenticates as its attached service account.
 `.dockerignore` / `.gcloudignore` keep `.env`, `*-key.json` and local databases out of the image.
@@ -33,15 +35,19 @@ gcloud run deploy vahxa-student --project=vahxa-student --region=us-central1 \
 Schema changes that only **add nullable columns or new tables** are applied automatically on startup.
 Anything else (renames, NOT NULL columns, type changes) needs a manual migration first.
 
-## Give someone access
+## Access control
 
-1. Add them as a test user: Console → Google Auth Platform → **Audience** → *Test users*.
-2. Grant IAP access:
-   ```bash
-   gcloud iap web add-iam-policy-binding --project=vahxa-student \
-     --member=user:EMAIL --role=roles/iap.httpsResourceAccessor \
-     --region=us-central1 --resource-type=cloud-run --service=vahxa-student
-   ```
+Cloud Run allows unauthenticated invocations (`allUsers` → `roles/run.invoker`) and IAP is **off**, so
+anyone can reach the sign-in page. Every `/api` route except sign-in requires a session, and student
+data is only served once the student is fully approved:
+
+1. The student signs in with Google and enters a parent's email.
+2. The parent receives a consent email and must sign in with **that** Google account to give consent.
+3. An admin (`ADMIN_EMAILS`, currently `vahxa.ai@gmail.com`) approves the student on the **Admin** page.
+
+No gcloud commands are needed to add a user. To make the service private again, turn IAP back on
+(`gcloud run services update vahxa-student --iap ...`), remove the `allUsers` invoker binding, and grant
+each user `roles/iap.httpsResourceAccessor` — students *and* parents then both need IAP access.
 
 ## Operations
 
@@ -54,22 +60,22 @@ Anything else (renames, NOT NULL columns, type changes) needs a manual migration
 
 ## First-time setup (already done for `vahxa-student`)
 
-Enabled APIs: Cloud Run, Cloud Build, Artifact Registry, Cloud SQL Admin, Secret Manager, IAP,
+Enabled APIs: Cloud Run, Cloud Build, Artifact Registry, Cloud SQL Admin, Secret Manager,
 Cloud Resource Manager, Vertex AI, Firestore. Then created the Artifact Registry repo, the Cloud SQL
-instance/database/user, the `database-url` secret, and deployed with:
+instance/database/user, the `database-url`, `session-secret` and `smtp-password` secrets, and deployed with:
 
 ```bash
 gcloud run deploy vahxa-student --project=vahxa-student --region=us-central1 \
   --image=us-central1-docker.pkg.dev/vahxa-student/vahxa/vahxa-student:TAG \
   --service-account=student-app@vahxa-student.iam.gserviceaccount.com \
   --add-cloudsql-instances=vahxa-student:us-central1:vahxa-student-db \
-  --set-secrets=DATABASE_URL=database-url:latest \
-  --set-env-vars=VERTEX_PROJECT_ID=vahxa-student,VERTEX_LOCATION=global,CURRICULUM_LIBRARY_ENABLED=true \
-  --no-allow-unauthenticated --iap \
+  --set-secrets=DATABASE_URL=database-url:latest,SESSION_SECRET=session-secret:latest,SMTP_PASSWORD=smtp-password:latest \
+  --set-env-vars=VERTEX_PROJECT_ID=vahxa-student,VERTEX_LOCATION=global,CURRICULUM_LIBRARY_ENABLED=true,GOOGLE_OAUTH_CLIENT_ID=CLIENT_ID,ADMIN_EMAILS=vahxa.ai@gmail.com,APP_BASE_URL=SERVICE_URL,SMTP_USER=SENDER@gmail.com,EMAIL_FROM=SENDER@gmail.com \
+  --allow-unauthenticated \
   --min-instances=0 --max-instances=2 --memory=512Mi --cpu=1 --timeout=300
 ```
 
-In a project without a Google Cloud organization, IAP needs a **custom OAuth client** for Gmail users:
-create the consent screen (External, Testing) and a *Web application* OAuth client whose redirect URI is
-`https://iap.googleapis.com/v1/oauth/clientIds/CLIENT_ID:handleRedirect`, then apply it with
-`gcloud iap settings set` (`accessSettings.oauthSettings.clientId/clientSecret`) for the Cloud Run service.
+For Google sign-in, create the OAuth consent screen (External, then **publish** it so any Gmail user can
+sign in) and a *Web application* OAuth client with the service URL (and `http://localhost:3000` for local
+dev) under **Authorized JavaScript origins**; its client ID is `GOOGLE_OAUTH_CLIENT_ID`. For consent
+emails, create a Gmail app password for the sender account and store it in the `smtp-password` secret.
